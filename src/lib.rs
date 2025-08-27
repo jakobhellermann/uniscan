@@ -8,7 +8,7 @@ use rabex::tpk::TpkTypeTreeBlob;
 use rabex::typetree::typetree_cache::sync::TypeTreeCache;
 use rabex_env::game_files::GameFiles;
 use rabex_env::handle::SerializedFileHandle;
-use rabex_env::unity::types::MonoBehaviour;
+use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::{EnvResolver, Environment};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
@@ -18,6 +18,35 @@ pub struct UniScan {
     pub env: &'static Environment,
     pub scene_names: Vec<String>,
     pub query: QueryRunner,
+}
+
+pub struct ScriptFilter {
+    filter: String,
+}
+impl ScriptFilter {
+    pub fn empty() -> Self {
+        ScriptFilter {
+            filter: String::new(),
+        }
+    }
+
+    pub fn new(filter: &str) -> ScriptFilter {
+        ScriptFilter {
+            filter: filter.trim().to_ascii_lowercase(),
+        }
+    }
+
+    pub fn matches(&self, script: &MonoScript) -> bool {
+        if self.filter.is_empty() {
+            return false;
+        }
+        let class = script.m_ClassName.to_ascii_lowercase();
+
+        match self.filter.len() {
+            0..3 => class == self.filter,
+            _ => class.contains(&self.filter),
+        }
+    }
 }
 
 impl UniScan {
@@ -44,7 +73,7 @@ impl UniScan {
         })
     }
 
-    pub fn scan_all(&self, script_filter: &str) -> Result<Vec<serde_json::Value>> {
+    pub fn scan_all(&self, script_filter: &ScriptFilter) -> Result<Vec<serde_json::Value>> {
         self.env
             .resolver
             .serialized_files()?
@@ -74,7 +103,11 @@ impl UniScan {
             })
     }
 
-    pub fn scan_file(&self, path: &str, script_filter: &str) -> Result<Vec<serde_json::Value>> {
+    pub fn scan_file(
+        &self,
+        path: &str,
+        script_filter: &ScriptFilter,
+    ) -> Result<Vec<serde_json::Value>> {
         let (file, data) = self
             .env
             .load_leaf(path)
@@ -88,7 +121,7 @@ impl UniScan {
                 continue;
             };
 
-            if script.full_name() == script_filter {
+            if script_filter.matches(&script) {
                 let mut data = mb.cast::<serde_json::Value>().read()?;
                 qualify_pptr::qualify_pptrs(path, &file, &mut data)?;
 

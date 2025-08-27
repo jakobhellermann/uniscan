@@ -3,7 +3,7 @@ use rabex_env::EnvResolver;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::collections::BTreeMap;
 use std::path::Path;
-use uniscan::UniScan;
+use uniscan::{ScriptFilter, UniScan};
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
@@ -11,6 +11,7 @@ fn main() -> Result<()> {
     let script_filter = args.next().context("missing name of Script")?;
     let filter = args.next();
 
+    let script_filter = ScriptFilter::new(&script_filter);
     let uniscan = UniScan::new(Path::new(&game_dir), filter.as_deref().unwrap_or("."))?;
 
     let all = uniscan

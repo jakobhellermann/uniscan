@@ -8,7 +8,7 @@ use rfd::FileHandle;
 use std::fmt::Debug;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
-use uniscan::UniScan;
+use uniscan::{ScriptFilter, UniScan};
 
 type Column<'a> = iced::widget::Column<'a, Message>;
 
@@ -43,7 +43,8 @@ struct Selection {
 }
 
 struct State {
-    script_filter: String,
+    script_filter_raw: String,
+    script_filter: ScriptFilter,
     query: String,
 
     selection: Option<Selection>,
@@ -54,7 +55,8 @@ struct State {
 impl Default for State {
     fn default() -> Self {
         Self {
-            script_filter: String::new(),
+            script_filter_raw: String::new(),
+            script_filter: ScriptFilter::empty(),
             query: String::new(),
             selection: None,
             error: None,
@@ -98,7 +100,8 @@ impl State {
                 Err(e) => Task::done(Message::Error(e.to_string())),
             },
             Message::SetScriptFilter(script_filter) => {
-                self.script_filter = script_filter;
+                self.script_filter_raw = script_filter;
+                self.script_filter = ScriptFilter::new(&self.script_filter_raw);
                 self.reload()
             }
             Message::SetQuery(query) => {
@@ -161,11 +164,11 @@ impl State {
                 .align_y(Vertical::Center);
 
                 let query_input = text_input("jq query", &self.query).on_input(Message::SetQuery);
-                let script_filter_input = text_input("Class Name", &self.script_filter)
+                let script_filter_input = text_input("Class Name", &self.script_filter_raw)
                     .width(Length::Fixed(160.))
                     .on_input(Message::SetScriptFilter);
 
-                let results_text = text(match self.script_filter.is_empty() {
+                let results_text = text(match self.script_filter_raw.is_empty() {
                     true => String::new(),
                     false => format!("Found {} items", selection.results.len()),
                 });
