@@ -11,13 +11,9 @@ fn main() -> Result<()> {
     let script_filter = args.next().context("missing name of Script")?;
     let filter = args.next();
 
-    let state = UniScan::new(
-        Path::new(&game_dir),
-        &script_filter,
-        filter.as_deref().unwrap_or("."),
-    )?;
+    let uniscan = UniScan::new(Path::new(&game_dir), filter.as_deref().unwrap_or("."))?;
 
-    let all = state
+    let all = uniscan
         .env
         .resolver
         .serialized_files()?
@@ -32,11 +28,11 @@ fn main() -> Result<()> {
                 .and_then(|x| x.parse::<usize>().ok());
 
             let scene_name = match level_index {
-                Some(index) => &state.scene_names[index],
+                Some(index) => &uniscan.scene_names[index],
                 None => path_str,
             };
 
-            let results = state.scan(path_str)?;
+            let results = uniscan.scan_file(path_str, &script_filter)?;
 
             let mut map = BTreeMap::default();
             if !results.is_empty() {

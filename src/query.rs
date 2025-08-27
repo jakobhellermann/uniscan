@@ -45,7 +45,6 @@ fn funs() -> impl Iterator<Item = jaq_std::Filter<jaq_core::Native<jaq_json::Val
     )]
     .into_iter()
 }
-
 pub struct QueryRunner {
     filter: Filter<Native<jaq_json::Val>>,
 }
@@ -55,12 +54,19 @@ impl QueryRunner {
         let mut env = Some(env);
         ENV.get_or_init(|| env.take().unwrap())
     }
+
+    pub fn set_query(&mut self, query: &str) -> Result<()> {
+        *self = QueryRunner::new(query)?;
+        Ok(())
+    }
+
     pub fn new(query: &str) -> Result<Self> {
+        let loader = jaq_core::load::Loader::new(jaq_std::defs().chain(jaq_json::defs()));
+
         let program = jaq_core::load::File {
             code: query,
             path: (),
         };
-        let loader = jaq_core::load::Loader::new(jaq_std::defs().chain(jaq_json::defs()));
         let arena = jaq_core::load::Arena::default();
         let modules = loader.load(&arena, program).map_err(|e| {
             anyhow!(
