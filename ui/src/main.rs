@@ -19,6 +19,9 @@ use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
 use crate::rescan::ScanSettings;
 use crate::widgets::margin;
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 struct App {
     query_raw: String,
     script_filter_raw: String,

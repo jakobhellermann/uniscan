@@ -14,3 +14,4 @@ xilem = { git = "https://github.com/linebender/xilem", rev = "f40a430" }
 serde_json = "1.0"
 anyhow = "1.0"
 tracing = "0.1"
+mimalloc = "0.1"

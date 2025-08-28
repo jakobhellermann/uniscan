@@ -3,6 +3,9 @@ use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
 use uniscan::{JsonValue, ScriptFilter, UniScan};
 
+#[global_allocator]
+static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
+
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
     let game_dir = args.next().context("missing path to game")?;
