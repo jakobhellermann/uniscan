@@ -1,5 +1,7 @@
 use anyhow::{Result, anyhow};
-use jaq_core::{Filter, Native};
+use jaq_core::{DataT, Filter, Lut, Vars, data};
+use jaq_json::Val;
+use jaq_std::input::{self, Inputs};
 use rabex::objects::PPtr;
 use rabex_env::Environment;
 use serde::Deserialize;
@@ -26,11 +28,12 @@ fn deref(pptr: serde_json::Value) -> Result<serde_json::Value> {
     Ok(value)
 }
 
-fn funs() -> impl Iterator<Item = jaq_std::Filter<jaq_core::Native<jaq_json::Val>>> {
+fn funs<D: for<'a> DataT<V<'a> = jaq_json::Val>>()
+-> impl Iterator<Item = jaq_std::Filter<jaq_core::Native<D>>> {
     [(
         "deref",
         vec![].into_boxed_slice(),
-        jaq_core::Native::new(|_, cv| {
+        jaq_core::Native::new(|cv| {
             let pptr = serde_json::Value::from(cv.1);
             let obj = match deref(pptr) {
                 Ok(val) => Ok(jaq_json::Val::from(val)),
@@ -46,7 +49,7 @@ fn funs() -> impl Iterator<Item = jaq_std::Filter<jaq_core::Native<jaq_json::Val
     .into_iter()
 }
 pub struct QueryRunner {
-    filter: Filter<Native<jaq_json::Val>>,
+    filter: Filter<DataKind>,
 }
 
 impl QueryRunner {
@@ -81,7 +84,7 @@ impl QueryRunner {
             .with_funs(jaq_std::funs().chain(jaq_json::funs()).chain(funs()))
             .with_global_vars(["$scene_path"])
             .compile(modules);
-        let filter = match filter {
+        let filter: Filter<DataKind> = match filter {
             Ok(filter) => filter,
             Err(errors) => {
                 anyhow::bail!("{:#?}", errors);
@@ -91,19 +94,54 @@ impl QueryRunner {
         Ok(QueryRunner { filter })
     }
 
-    pub fn exec(&self, data: serde_json::Value) -> Result<Vec<jaq_json::Val>> {
-        let inputs = jaq_core::RcIter::new(core::iter::empty());
-        let out = self.filter.run((
-            jaq_core::Ctx::new([jaq_json::Val::Str(Rc::new("hi".into()))], &inputs),
-            jaq_json::Val::from(data),
+    pub fn exec(&self, item: serde_json::Value) -> Result<Vec<jaq_json::Val>> {
+        let inputs = jaq_std::input::RcIter::new(core::iter::empty());
+        let data = Data {
+            lut: &self.filter.lut,
+            inputs: &inputs,
+        };
+        let out = self.filter.id.run::<DataKind>((
+            // jaq_core::Ctx::new([jaq_json::Val::Str(Rc::new("hi".into()))], &inputs),
+            jaq_core::Ctx::new(&data, Vars::new([jaq_json::Val::Str(Rc::new("hi".into()))])),
+            jaq_json::Val::from(item),
         ));
 
         let results = out
             .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| anyhow::anyhow!("{}", e))?;
+            .map_err(|e| anyhow::anyhow!("{:?}", e))?;
 
         Ok(results)
     }
 }
 
 static ENV: std::sync::OnceLock<Environment> = std::sync::OnceLock::new();
+
+pub struct DataKind;
+
+impl DataT for DataKind {
+    type V<'a> = Val;
+    type Data<'a> = &'a Data<'a>;
+}
+
+pub struct Data<'a> {
+    lut: &'a Lut<DataKind>,
+    inputs: Inputs<'a, Val>,
+}
+
+impl<'a> Data<'a> {
+    pub fn new(lut: &'a Lut<DataKind>, inputs: Inputs<'a, Val>) -> Self {
+        Self { lut, inputs }
+    }
+}
+
+impl<'a> data::HasLut<'a, DataKind> for &'a Data<'a> {
+    fn lut(&self) -> &'a Lut<DataKind> {
+        self.lut
+    }
+}
+
+impl<'a> input::HasInputs<'a, Val> for &'a Data<'a> {
+    fn inputs(&self) -> Inputs<'a, Val> {
+        self.inputs
+    }
+}
