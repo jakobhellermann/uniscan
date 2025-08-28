@@ -1,5 +1,5 @@
 use anyhow::{Result, anyhow};
-use jaq_core::{DataT, Filter, Lut, Vars, data};
+use jaq_core::{DataT, Filter, Lut, Vars, data, load, unwrap_valr};
 use jaq_json::Val;
 use jaq_std::input::{self, Inputs};
 use rabex::objects::PPtr;
@@ -63,32 +63,63 @@ impl QueryRunner {
     }
 
     pub fn new(query: &str) -> Result<Self> {
-        let loader = jaq_core::load::Loader::new(jaq_std::defs().chain(jaq_json::defs()));
+        let loader = load::Loader::new(jaq_std::defs().chain(jaq_json::defs()));
 
-        let program = jaq_core::load::File {
+        let program = load::File {
             code: query,
             path: (),
         };
-        let arena = jaq_core::load::Arena::default();
-        let modules = loader.load(&arena, program).map_err(|e| {
-            anyhow!(
-                "{}",
-                e.iter()
-                    .map(|x| format!("{:?}", x))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            )
+        let arena = load::Arena::default();
+        let modules = loader.load(&arena, program).map_err(|errors| {
+            let mut text = String::new();
+            for (_, error) in errors {
+                match error {
+                    load::Error::Io(items) => {
+                        for (path, error) in items {
+                            text.push_str(&format!("could not load file {path}: {error}\n"));
+                        }
+                    }
+                    load::Error::Lex(items) => {
+                        for (expected, found) in items {
+                            text.push_str(&format!(
+                                "expected {}, found {found}\n",
+                                expected.as_str()
+                            ));
+                        }
+                    }
+                    load::Error::Parse(items) => {
+                        for (expected, found) in items {
+                            let found = if found.is_empty() {
+                                "unexpected end of input"
+                            } else {
+                                found
+                            };
+
+                            text.push_str(&format!(
+                                "expected {}, found {found}\n",
+                                expected.as_str()
+                            ));
+                        }
+                    }
+                }
+            }
+            text.truncate(text.len() - 1);
+            anyhow!("{text}")
         })?;
         let filter = jaq_core::Compiler::default()
             .with_funs(jaq_std::funs().chain(jaq_json::funs()).chain(funs()))
             .with_global_vars(["$scene_path"])
-            .compile(modules);
-        let filter: Filter<DataKind> = match filter {
-            Ok(filter) => filter,
-            Err(errors) => {
-                anyhow::bail!("{:#?}", errors);
-            }
-        };
+            .compile(modules)
+            .map_err(|errors| {
+                let mut text = String::new();
+                for (_, all) in errors {
+                    for (found, undefined) in all {
+                        text.push_str(&format!("undefined {}: {}\n", undefined.as_str(), found));
+                    }
+                }
+                text.truncate(text.len() - 1);
+                anyhow!("{}", text)
+            })?;
 
         Ok(QueryRunner { filter })
     }
@@ -105,11 +136,8 @@ impl QueryRunner {
             item,
         ));
 
-        let results = out
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|e| anyhow::anyhow!("{:?}", e))?;
-
-        Ok(results)
+        let res = out.collect::<Result<Vec<_>, _>>();
+        unwrap_valr(res).map_err(|e| anyhow!("{}", e))
     }
 }
 

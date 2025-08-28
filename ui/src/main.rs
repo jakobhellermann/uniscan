@@ -136,7 +136,8 @@ impl App {
                 self.error
                     .as_ref()
                     .err()
-                    .map(|e| label(format!("{:?}", e)).color(COLOR_ERROR)),
+                    .map(|e| label(format!("{:?}", e)).color(COLOR_ERROR))
+                    .unwrap_or_else(|| label("")),
                 self.results
                     .as_ref()
                     .map(|(_, count)| label(format!("Found {} results", count))),
