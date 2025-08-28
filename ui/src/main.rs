@@ -8,10 +8,11 @@ use tracing::debug;
 use uniscan::{ScriptFilter, UniScan};
 use winit::error::EventLoopError;
 use xilem::core::fork;
-use xilem::style::Style;
+use xilem::style::{Padding, Style};
 use xilem::tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender};
 use xilem::view::{
-    FlexExt, button, flex, flex_row, label, portal, prose, sized_box, text_input, worker,
+    FlexExt, button, flex, flex_row, label, portal, prose, sized_box, text_input, virtual_scroll,
+    worker,
 };
 use xilem::{EventLoop, WidgetView, WindowOptions, Xilem, tokio};
 
@@ -88,16 +89,24 @@ fn app_logic(data: &mut App) -> impl WidgetView<App> + use<> {
                 Some(results) => format!("Found {} results", results.len()),
                 None => "".into(),
             }),
-            sized_box(portal(flex(
-                data.results
-                    .as_deref()
-                    .unwrap_or_default()
-                    .iter()
-                    .map(|value| {
-                        let val = serde_json::to_string_pretty(&value).unwrap();
-                        sized_box(prose(val)).background_color(AlphaColor::from_rgb8(43, 69, 86))
-                    })
-                    .collect::<Vec<_>>(),
+            sized_box(portal(virtual_scroll(
+                0..data.results.as_deref().unwrap_or_default().len() as i64,
+                |data: &mut App, index| {
+                    let results = data.results.as_deref().unwrap_or_default();
+                    let Some(value) = results.get(index as usize) else {
+                        return flex(()).boxed();
+                    };
+
+                    let val = serde_json::to_string_pretty(&value).unwrap();
+
+                    return sized_box(
+                        sized_box(prose(val))
+                            .background_color(AlphaColor::from_rgb8(43, 69, 86))
+                            .padding(4.),
+                    )
+                    .padding(Padding::bottom(8.))
+                    .boxed();
+                },
             )))
             .expand_height()
             .flex(1.0),
