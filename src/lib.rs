@@ -161,7 +161,7 @@ impl UniScan {
         data: &mut jaq_json::Val,
     ) -> Result<(), anyhow::Error> {
         qualify_pptr::qualify_pptrs(path_str, file, data)?;
-        enrich_object(data, path_str, file, script, Some(&self.scene_names))?;
+        enrich_object(data, path_str, file, Some(script), Some(&self.scene_names))?;
         Ok(())
     }
 }
@@ -170,7 +170,7 @@ pub(crate) fn enrich_object(
     data: &mut jaq_json::Val,
     path_str: &str,
     file: &SerializedFileHandle<'_>,
-    script: &MonoScript,
+    script: Option<&MonoScript>,
     scene_names: Option<&[String]>,
 ) -> Result<(), anyhow::Error> {
     qualify_pptr::qualify_pptrs(path_str, file, data)?;
@@ -180,14 +180,17 @@ pub(crate) fn enrich_object(
         _ => unreachable!(),
     };
     data_obj.insert(Rc::new("_file".into()), path_str.to_owned().into());
-    data_obj.insert(
-        Rc::new("_type".into()),
-        script.full_name().into_owned().into(),
-    );
-    data_obj.insert(
-        Rc::new("_asm".into()),
-        script.assembly_name().into_owned().into(),
-    );
+
+    if let Some(script) = script {
+        data_obj.insert(
+            Rc::new("_type".into()),
+            script.full_name().into_owned().into(),
+        );
+        data_obj.insert(
+            Rc::new("_asm".into()),
+            script.assembly_name().into_owned().into(),
+        );
+    }
 
     if let Some(scene_names) = scene_names
         && let Some(scene_index) = path_str

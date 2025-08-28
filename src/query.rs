@@ -16,7 +16,8 @@ fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
 
     let file = env.load_cached(&qualified_pptr.file).unwrap();
     let pptr = PPtr::local(qualified_pptr.path_id).typed::<jaq_json::Val>();
-    let mut value = file.deref_read(pptr).map_err(|e| {
+    let object = file.deref(pptr)?;
+    let mut value = object.read().map_err(|e| {
         anyhow!(
             "Failed to read object {:?} in {}: {e}",
             pptr.m_PathID,
@@ -24,6 +25,15 @@ fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
         )
     })?;
     qualify_pptrs(&qualified_pptr.file, &file, &mut value)?;
+
+    let script = object.mono_script()?;
+    crate::enrich_object(
+        &mut value,
+        &qualified_pptr.file,
+        &file,
+        script.as_ref(),
+        None,
+    )?;
 
     Ok(value)
 }
