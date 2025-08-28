@@ -17,3 +17,7 @@ anyhow = "1.0"
 tracing = "0.1"
 mimalloc = "0.1"
 opener = "0.8.2"
+rfd = { version = "0.15.4", default-features = false, features = [
+    "xdg-portal",
+    "tokio",
+] }

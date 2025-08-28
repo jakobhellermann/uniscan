@@ -1,4 +1,5 @@
 mod rescan;
+mod save;
 mod utils;
 mod widgets;
 
@@ -37,6 +38,7 @@ struct App {
     error: Result<()>,
 
     sender: Option<UnboundedSender<ScanSettings>>,
+    save_sender: Option<UnboundedSender<save::Command>>,
 }
 
 impl Default for App {
@@ -49,6 +51,7 @@ impl Default for App {
             results: None,
             error: Result::Ok(()),
             sender: None,
+            save_sender: None,
         }
     }
 }
@@ -99,10 +102,14 @@ impl App {
         Ok(())
     }
 
-    // TODO
+    fn send_command(&self, cmd: save::Command) {
+        let _ = self.save_sender.as_ref().unwrap().send(cmd);
+    }
+
     pub fn save(&mut self) -> Result<()> {
         let results = self.results();
-        let _formatted = serde_json::to_string_pretty(&results)?;
+        let formatted = serde_json::to_string_pretty(&results)?;
+        self.send_command(save::Command::Save(formatted));
 
         Ok(())
     }
@@ -193,23 +200,34 @@ impl App {
             .cross_axis_alignment(CrossAxisAlignment::Fill)
             .padding(8.)
             .background_color(BACKGROUND_COLOR),
-            worker(
-                rescan::worker,
-                |state: &mut App, sender| {
-                    state.sender = Some(sender);
-                    state.reload();
-                },
-                |state, res: Result<rescan::Answer>| match res {
-                    Ok(res) => {
-                        state.error = Ok(());
-                        state.results = Some(res);
-                    }
-                    Err(e) => {
-                        state.error = Err(e);
-                    }
-                },
+            (
+                worker(
+                    rescan::worker,
+                    |state: &mut App, sender| {
+                        state.sender = Some(sender);
+                        state.reload();
+                    },
+                    |state, res: Result<rescan::Answer>| match res {
+                        Ok(res) => {
+                            state.error = Ok(());
+                            state.results = Some(res);
+                        }
+                        Err(e) => {
+                            state.error = Err(e);
+                        }
+                    },
+                ),
+                worker(
+                    save::worker,
+                    |state: &mut App, sender| state.save_sender = Some(sender),
+                    App::set_error,
+                ),
             ),
         )
+    }
+
+    fn set_error<T>(&mut self, result: Result<T>) {
+        self.error = result.map(drop);
     }
 }
 
