@@ -1,0 +1,16 @@
+[
+  {
+    "label": "UI (Debug)",
+    "command": "cargo run -p uniscan-ui",
+    "env": {
+      "RUST_LOG": "info,uniscan_ui=debug"
+    }
+  },
+  {
+    "label": "UI (Release)",
+    "command": "cargo run -p uniscan-ui -r",
+    "env": {
+      "RUST_LOG": "info,uniscan_ui=debug"
+    }
+  }
+]

@@ -25,7 +25,7 @@ jaq-std = { version = "2.1", default-features = true, features = [
 
 [workspace]
 members = [".", "ui"]
-default-members = [".", "ui"]
+default-members = ["ui"]
 
 [workspace.dependencies]
 typetree-generator-api = { path = "../unity-scene-repacker/typetree-generator-api" }

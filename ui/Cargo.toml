@@ -2,22 +2,15 @@
 name = "uniscan-ui"
 version = "0.1.0"
 edition = "2024"
-license = "MIT"
 
 [dependencies]
-iced = { git = "https://github.com/iced-rs/iced", rev = "89f480", default-features = false, features = [
-    "advanced",
-    "tiny-skia",
-    "fira-sans",
-    "thread-pool",
-] }
-iced_highlighter = { git = "https://github.com/iced-rs/iced", rev = "89f480" }
-rfd = "0.15"
-numeric-sort = "0.1"
-async-channel = "2.3"
-open = "5.3"
-rabex.workspace = true
+masonry = { git = "https://github.com/linebender/xilem", version = "0.3.0" }
+masonry_winit = { git = "https://github.com/linebender/xilem", version = "0.3.0" }
 rabex-env.workspace = true
-uniscan = { version = "0.1.0", path = ".." }
+rabex.workspace = true
+uniscan = { version = "0.1", path = ".." }
+winit = "0.30"
+xilem = { git = "https://github.com/linebender/xilem", version = "0.3.0" }
 serde_json = "1.0"
 anyhow = "1.0"
+tracing = "0.1"

@@ -20,14 +20,13 @@ pub struct UniScan {
     pub query: QueryRunner,
 }
 
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct ScriptFilter {
     filter: String,
 }
 impl ScriptFilter {
     pub fn empty() -> Self {
-        ScriptFilter {
-            filter: String::new(),
-        }
+        ScriptFilter::default()
     }
 
     pub fn new(filter: &str) -> ScriptFilter {
