@@ -9,13 +9,13 @@ use std::rc::Rc;
 
 use crate::qualify_pptr::{QualifiedPPtr, qualify_pptrs};
 
-fn deref(pptr: serde_json::Value) -> Result<serde_json::Value> {
+fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
     let env = ENV.get().unwrap();
 
-    let qualified_pptr = QualifiedPPtr::deserialize(pptr)?;
+    let qualified_pptr = QualifiedPPtr::deserialize(serde_json::Value::from(pptr))?;
 
     let file = env.load_cached(&qualified_pptr.file).unwrap();
-    let pptr = PPtr::local(qualified_pptr.path_id).typed::<serde_json::Value>();
+    let pptr = PPtr::local(qualified_pptr.path_id).typed::<jaq_json::Val>();
     let mut value = file.deref_read(pptr).map_err(|e| {
         anyhow!(
             "Failed to read object {:?} in {}: {e}",
@@ -33,10 +33,9 @@ fn funs<D: for<'a> DataT<V<'a> = jaq_json::Val>>()
     [(
         "deref",
         vec![].into_boxed_slice(),
-        jaq_core::Native::new(|cv| {
-            let pptr = serde_json::Value::from(cv.1);
-            let obj = match deref(pptr) {
-                Ok(val) => Ok(jaq_json::Val::from(val)),
+        jaq_core::Native::new(|(_, val)| {
+            let obj = match deref(val) {
+                Ok(val) => Ok(val),
                 Err(e) => Err(jaq_core::Exn::from(jaq_core::Error::str(format!(
                     "Cannot call `deref`: {}",
                     e
@@ -94,7 +93,7 @@ impl QueryRunner {
         Ok(QueryRunner { filter })
     }
 
-    pub fn exec(&self, item: serde_json::Value) -> Result<Vec<jaq_json::Val>> {
+    pub fn exec(&self, item: jaq_json::Val) -> Result<Vec<jaq_json::Val>> {
         let inputs = jaq_std::input::RcIter::new(core::iter::empty());
         let data = Data {
             lut: &self.filter.lut,
@@ -103,7 +102,7 @@ impl QueryRunner {
         let out = self.filter.id.run::<DataKind>((
             // jaq_core::Ctx::new([jaq_json::Val::Str(Rc::new("hi".into()))], &inputs),
             jaq_core::Ctx::new(&data, Vars::new([jaq_json::Val::Str(Rc::new("hi".into()))])),
-            jaq_json::Val::from(item),
+            item,
         ));
 
         let results = out

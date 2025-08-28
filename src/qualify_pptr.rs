@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use anyhow::{Context as _, Result};
 use rabex::objects::PPtr;
 use rabex::objects::pptr::{FileId, PathId};
@@ -14,20 +16,29 @@ pub struct QualifiedPPtr {
 pub fn qualify_pptrs<R: EnvResolver, P: TypeTreeProvider>(
     file_path: &str,
     file: &SerializedFileHandle<'_, R, P>,
-    value: &mut serde_json::Value,
+    value: &mut jaq_json::Val,
 ) -> Result<()> {
     *value = match value {
-        serde_json::Value::Array(values) => {
+        jaq_json::Val::Arr(values) => {
+            let values = Rc::get_mut(values).unwrap();
             return values
                 .iter_mut()
                 .try_for_each(|x| qualify_pptrs(file_path, file, x));
         }
-        serde_json::Value::Object(map) => {
+        jaq_json::Val::Obj(map) => {
+            let map = Rc::get_mut(map).unwrap();
+
             if map.len() == 2
-                && let Some(file_id) = map.get("m_FileID").and_then(|x| x.as_number()?.as_i64())
-                && let Some(path_id) = map.get("m_PathID").and_then(|x| x.as_number()?.as_i64())
+                && let Some(file_id) = map
+                    .iter()
+                    .find(|x| **x.0 == "m_FileID")
+                    .and_then(|(_, x)| x.as_int().ok())
+                && let Some(path_id) = map
+                    .iter()
+                    .find(|x| **x.0 == "m_PathID")
+                    .and_then(|(_, x)| x.as_int().ok())
             {
-                let pptr = PPtr::new(file_id as FileId, path_id).optional();
+                let pptr = PPtr::new(file_id as FileId, path_id as PathId).optional();
                 match pptr {
                     Some(pptr) => {
                         let pptr_file = if pptr.is_local() {
@@ -38,12 +49,13 @@ pub fn qualify_pptrs<R: EnvResolver, P: TypeTreeProvider>(
                                 .with_context(|| format!("invalid PPtr: {:?}", pptr))?;
                             external.pathName.clone()
                         };
-                        serde_json::json!({
-                            "file": pptr_file,
-                            "path_id": path_id,
-                        })
+
+                        let mut obj = jaq_json::Map::default();
+                        obj.insert(Rc::new("file".into()), pptr_file.into());
+                        obj.insert(Rc::new("path_id".into()), path_id.into());
+                        jaq_json::Val::Obj(Rc::new(obj))
                     }
-                    None => serde_json::Value::Null,
+                    None => jaq_json::Val::Null,
                 }
             } else {
                 return map

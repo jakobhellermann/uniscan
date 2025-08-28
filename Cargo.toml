@@ -18,6 +18,7 @@ jaq-core = "2.2"
 jaq-json = { version = "1.1", default-features = true, features = [
     "serde_json",
     "parse",
+    "deserialize",
 ] }
 jaq-std = { version = "2.1", default-features = true, features = [
     "std",
@@ -40,6 +41,6 @@ rabex-env = { path = "../rabex-env" }
 opt-level = 2
 
 [patch.crates-io]
-jaq-core = { git = "https://github.com/01mf02/jaq" }
-jaq-std = { git = "https://github.com/01mf02/jaq" }
-jaq-json = { git = "https://github.com/01mf02/jaq" }
+jaq-core = { git = "https://github.com/jakobhellermann/jaq", branch = "jaq-json-deserialize" }
+jaq-std = { git = "https://github.com/jakobhellermann/jaq", branch = "jaq-json-deserialize" }
+jaq-json = { git = "https://github.com/jakobhellermann/jaq", branch = "jaq-json-deserialize" }

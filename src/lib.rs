@@ -12,6 +12,7 @@ use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::{EnvResolver, Environment};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use typetree_generator_api::GeneratorBackend;
 
@@ -104,17 +105,28 @@ impl UniScan {
                         return Ok(());
                     }
 
-                    let mut data = mb.cast::<serde_json::Value>().read()?;
-                    qualify_pptr::qualify_pptrs(path_str, &file, &mut data)?;
+                    let mut data = mb.cast::<jaq_json::Val>().read()?;
+                    qualify_pptr::qualify_pptrs(path_str, file, &mut data)?;
 
-                    let data_obj = data.as_object_mut().unwrap();
-                    data_obj.insert("_file".into(), path_str.to_owned().into());
-                    data_obj.insert("_type".into(), script.full_name().into());
-                    data_obj.insert("_asm".into(), script.assembly_name().into());
+                    let mut data_obj = match data {
+                        jaq_json::Val::Obj(obj) => {
+                            Rc::into_inner(obj).expect("references hanging around")
+                        }
+                        _ => unreachable!(),
+                    };
+                    data_obj.insert(Rc::new("_file".into()), path_str.to_owned().into());
+                    data_obj.insert(
+                        Rc::new("_type".into()),
+                        script.full_name().into_owned().into(),
+                    );
+                    data_obj.insert(
+                        Rc::new("_asm".into()),
+                        script.assembly_name().into_owned().into(),
+                    );
+                    let data = jaq_json::Val::obj(data_obj);
 
                     for value in self.query.exec(data)? {
-                        let value = serde_json::Value::from(value);
-                        results.push(value);
+                        results.push(serde_json::Value::from(value));
                     }
                     Ok(())
                 })?;
