@@ -3,9 +3,12 @@ use std::str::FromStr;
 
 use xilem::WidgetView;
 use xilem::style::{Padding, Style};
-use xilem::view::{SizedBox, TextInput, sized_box, text_input};
+use xilem::view::{TextInput, sized_box, text_input};
 
-pub fn margin<State, Action, V>(inner: V, margin: impl Into<Padding>) -> SizedBox<V, State, Action>
+pub fn margin<State: 'static, Action: 'static, V: 'static>(
+    inner: V,
+    margin: Padding,
+) -> impl WidgetView<State, Action> + use<State, Action, V>
 where
     V: WidgetView<State, Action>,
 {

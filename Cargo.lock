@@ -70,13 +70,11 @@ checksum = "2abbfb16144cca5bb2ea6acad5865b7c1e70d4fa171ceba1a52ea8e78a7515f4"
 dependencies = [
  "accesskit",
  "accesskit_atspi_common",
- "async-channel",
- "async-executor",
- "async-task",
  "atspi",
  "futures-lite",
- "futures-util",
  "serde",
+ "tokio",
+ "tokio-stream",
  "zbus",
 ]
 
@@ -1091,37 +1089,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "futures-macro"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "162ee34ebcb7c64a8abebc059ce0fee27c2262618d7b60ed8faf72fef13c3650"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn",
-]
-
-[[package]]
-name = "futures-task"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f90f7dce0722e95104fcb095585910c0977252f286e354b5e3bd38902cd99988"
-
-[[package]]
-name = "futures-util"
-version = "0.3.31"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9fa08315bb612088cc391249efdc3bc77536f16c91f6cf495e6fbe85b20a4a81"
-dependencies = [
- "futures-core",
- "futures-macro",
- "futures-task",
- "pin-project-lite",
- "pin-utils",
- "slab",
-]
-
-[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1150,7 +1117,7 @@ dependencies = [
  "cfg-if",
  "libc",
  "r-efi",
- "wasi 0.14.2+wasi-0.2.4",
+ "wasi 0.14.3+wasi-0.2.4",
 ]
 
 [[package]]
@@ -1371,7 +1338,7 @@ checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
 [[package]]
 name = "jaq-core"
 version = "2.2.1"
-source = "git+https://github.com/jakobhellermann/jaq?branch=jaq-json-deserialize#9a832f3f764e1827c433a5b49b39c652579bd2ee"
+source = "git+https://github.com/jakobhellermann/jaq?branch=jaq-json-deserialize#9d9d77a1020c7806a3af383d90bc9e5ecfc1d039"
 dependencies = [
  "dyn-clone",
  "once_cell",
@@ -1381,7 +1348,7 @@ dependencies = [
 [[package]]
 name = "jaq-json"
 version = "1.1.3"
-source = "git+https://github.com/jakobhellermann/jaq?branch=jaq-json-deserialize#9a832f3f764e1827c433a5b49b39c652579bd2ee"
+source = "git+https://github.com/jakobhellermann/jaq?branch=jaq-json-deserialize#9d9d77a1020c7806a3af383d90bc9e5ecfc1d039"
 dependencies = [
  "foldhash",
  "hifijson",
@@ -1395,7 +1362,7 @@ dependencies = [
 [[package]]
 name = "jaq-std"
 version = "2.1.2"
-source = "git+https://github.com/jakobhellermann/jaq?branch=jaq-json-deserialize#9a832f3f764e1827c433a5b49b39c652579bd2ee"
+source = "git+https://github.com/jakobhellermann/jaq?branch=jaq-json-deserialize#9d9d77a1020c7806a3af383d90bc9e5ecfc1d039"
 dependencies = [
  "aho-corasick",
  "base64",
@@ -1594,7 +1561,7 @@ dependencies = [
 [[package]]
 name = "masonry"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
+source = "git+https://github.com/jakobhellermann/xilem?branch=accesskit-tokio#6066d516c65e5803f179a4981ce16ff67c7ff1d7"
 dependencies = [
  "accesskit",
  "dpi",
@@ -1608,7 +1575,7 @@ dependencies = [
 [[package]]
 name = "masonry_core"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
+source = "git+https://github.com/jakobhellermann/xilem?branch=accesskit-tokio#6066d516c65e5803f179a4981ce16ff67c7ff1d7"
 dependencies = [
  "accesskit",
  "anymap3",
@@ -1630,7 +1597,7 @@ dependencies = [
 [[package]]
 name = "masonry_winit"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
+source = "git+https://github.com/jakobhellermann/xilem?branch=accesskit-tokio#6066d516c65e5803f179a4981ce16ff67c7ff1d7"
 dependencies = [
  "accesskit_winit",
  "copypasta",
@@ -2273,12 +2240,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3b3cff922bd51709b605d9ead9aa71031d81447142d828eb4a6eba76fe619f9b"
 
 [[package]]
-name = "pin-utils"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
-
-[[package]]
 name = "piper"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2798,6 +2759,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "socket2"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "233504af464074f9d066d7b5416c5f9b894a5862a6506e306f7b816cdd6f1807"
+dependencies = [
+ "libc",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
 name = "spirv"
 version = "0.3.0+sdk-1.3.268.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3022,6 +2993,31 @@ dependencies = [
  "mio",
  "pin-project-lite",
  "slab",
+ "socket2",
+ "tokio-macros",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "2.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6e06d43f1345a3bcd39f6a56dbb7dcab2ba47e68e8ac134855e7e2bdbaf8cab8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
+name = "tokio-stream"
+version = "0.1.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eca58d7bba4a75707817a2c44174253f9236b2d5fbd055602e9d5c07c139a047"
+dependencies = [
+ "futures-core",
+ "pin-project-lite",
+ "tokio",
 ]
 
 [[package]]
@@ -3120,7 +3116,7 @@ dependencies = [
 [[package]]
 name = "tree_arena"
 version = "0.1.0"
-source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
+source = "git+https://github.com/jakobhellermann/xilem?branch=accesskit-tokio#6066d516c65e5803f179a4981ce16ff67c7ff1d7"
 dependencies = [
  "hashbrown",
 ]
@@ -3314,11 +3310,11 @@ checksum = "ccf3ec651a847eb01de73ccad15eb7d99f80485de043efb2f370cd654f4ea44b"
 
 [[package]]
 name = "wasi"
-version = "0.14.2+wasi-0.2.4"
+version = "0.14.3+wasi-0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9683f9a5a998d873c0d21fcbe3c083009670149a8fab228644b8bd36b2c48cb3"
+checksum = "6a51ae83037bdd272a9e28ce236db8c07016dd0d50c27038b3f407533c030c95"
 dependencies = [
- "wit-bindgen-rt",
+ "wit-bindgen",
 ]
 
 [[package]]
@@ -4215,13 +4211,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "wit-bindgen-rt"
-version = "0.39.0"
+name = "wit-bindgen"
+version = "0.45.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6f42320e61fe2cfd34354ecb597f86f413484a798ba44a8ca1165c58d42da6c1"
-dependencies = [
- "bitflags 2.9.3",
-]
+checksum = "052283831dbae3d879dc7f51f3d92703a316ca49f91540417d38591826127814"
 
 [[package]]
 name = "writeable"
@@ -4280,7 +4273,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 [[package]]
 name = "xilem"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
+source = "git+https://github.com/jakobhellermann/xilem?branch=accesskit-tokio#6066d516c65e5803f179a4981ce16ff67c7ff1d7"
 dependencies = [
  "masonry",
  "masonry_winit",
@@ -4294,7 +4287,7 @@ dependencies = [
 [[package]]
 name = "xilem_core"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
+source = "git+https://github.com/jakobhellermann/xilem?branch=accesskit-tokio#6066d516c65e5803f179a4981ce16ff67c7ff1d7"
 dependencies = [
  "anymore",
  "hashbrown",

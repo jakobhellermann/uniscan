@@ -160,8 +160,8 @@ impl App {
                 self.error
                     .as_ref()
                     .err()
-                    .map(|e| label(format!("{:?}", e)).color(COLOR_ERROR))
-                    .unwrap_or_else(|| label("")),
+                    .map(|e| label(format!("{:?}", e)).color(COLOR_ERROR).boxed())
+                    .unwrap_or_else(|| label("").boxed()),
                 self.results
                     .as_ref()
                     .map(|(_, count)| label(format!("Found {} results", count))),
@@ -180,13 +180,13 @@ impl App {
                     ))
                     .width(Length::px(60.)),
                     button("Open as JSON", |app: &mut App| app.error = app.export())
+                        .disabled(!can_export)
                         .background_color(BUTTON_COLOR)
-                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR))
-                        .disabled(!can_export),
+                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
                     button("Save to file", |app: &mut App| app.error = app.save())
+                        .disabled(!can_export)
                         .background_color(BUTTON_COLOR)
-                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR))
-                        .disabled(!can_export),
+                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
                 ))
                 .main_axis_alignment(MainAxisAlignment::End),
             ))
