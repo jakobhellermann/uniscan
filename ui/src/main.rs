@@ -3,21 +3,26 @@ mod utils;
 mod widgets;
 
 use anyhow::Result;
-use masonry::peniko::color::AlphaColor;
 use masonry::properties::types::Length;
 use uniscan::{JsonValue, ScriptFilter};
 use winit::error::EventLoopError;
 use xilem::core::fork;
-use xilem::style::{Padding, Style};
+use xilem::style::{Background, Padding, Style};
 use xilem::tokio::sync::mpsc::UnboundedSender;
 use xilem::view::{
-    FlexExt, button, flex_col, flex_row, label, prose, sized_box, text_input, virtual_scroll,
-    worker,
+    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, prose,
+    sized_box, text_input, virtual_scroll, worker,
 };
-use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
+use xilem::{Color, EventLoop, WidgetView, WindowOptions, Xilem};
 
 use crate::rescan::ScanSettings;
 use crate::widgets::margin;
+
+pub const COLOR_ERROR: Color = Color::from_rgb8(255, 51, 51);
+pub const BACKGROUND_COLOR: Color = Color::from_rgb8(18, 18, 20);
+pub const HIGHLIGHT_COLOR: Color = Color::from_rgb8(36, 36, 40);
+pub const BUTTON_COLOR: Color = Color::from_rgb8(60, 90, 140);
+pub const BUTTON_DISABLED_COLOR: Color = Color::from_rgb8(55, 55, 60);
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -28,7 +33,7 @@ struct App {
     script_filter: ScriptFilter,
 
     results: Option<(Vec<JsonValue>, usize)>,
-    status: Result<()>,
+    error: Result<()>,
 
     sender: Option<UnboundedSender<ScanSettings>>,
 }
@@ -40,7 +45,7 @@ impl Default for App {
             script_filter: ScriptFilter::new("GeoRock"),
             script_filter_raw: "GeoRock".into(),
             results: None,
-            status: Result::Ok(()),
+            error: Result::Ok(()),
             sender: None,
         }
     }
@@ -117,7 +122,7 @@ impl App {
 
                 margin(
                     sized_box(prose(val))
-                        .background_color(AlphaColor::from_rgb8(43, 69, 86))
+                        .background_color(HIGHLIGHT_COLOR)
                         .padding(4.),
                     Padding::bottom(8.),
                 )
@@ -128,22 +133,26 @@ impl App {
         fork(
             flex_col((
                 search,
-                label(format!("{}", self.query_raw)),
-                label(match self.status {
-                    Err(ref e) => format!("{:?}", e),
-                    Ok(()) => "".into(),
-                }),
-                label(match self.results {
-                    Some((_, count)) => format!("Found {} results", count),
-                    None => "".into(),
-                }),
+                self.error
+                    .as_ref()
+                    .err()
+                    .map(|e| label(format!("{:?}", e)).color(COLOR_ERROR)),
+                self.results
+                    .as_ref()
+                    .map(|(_, count)| label(format!("Found {} results", count))),
                 sized_box(content).expand_height().flex(1.0),
                 flex_row((
-                    button("increment", |_: &mut App| {}),
-                    button("dec", |_: &mut App| {}),
-                )),
+                    button("Back", |_: &mut App| {}).background_color(BUTTON_COLOR),
+                    button("Export", |_: &mut App| {})
+                        .background_color(BUTTON_COLOR)
+                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR))
+                        .disabled(self.results.as_ref().is_none_or(|x| x.1 == 0)),
+                ))
+                .main_axis_alignment(MainAxisAlignment::End),
             ))
-            .padding(8.),
+            .cross_axis_alignment(CrossAxisAlignment::Fill)
+            .padding(8.)
+            .background_color(BACKGROUND_COLOR),
             worker(
                 rescan::worker,
                 |state: &mut App, sender| {
@@ -152,11 +161,11 @@ impl App {
                 },
                 |state, res: Result<rescan::Answer>| match res {
                     Ok(res) => {
-                        state.status = Ok(());
+                        state.error = Ok(());
                         state.results = Some(res);
                     }
                     Err(e) => {
-                        state.status = Err(e);
+                        state.error = Err(e);
                     }
                 },
             ),
