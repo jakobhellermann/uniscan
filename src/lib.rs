@@ -80,7 +80,14 @@ impl UniScan {
             .try_fold(Vec::new, |mut a, path| -> Result<_> {
                 let path_str = path.to_str().unwrap();
 
-                let results = self.scan_file(path_str, script_filter)?;
+                let mut results = Vec::new();
+                self.scan_file(path_str, script_filter, |value| {
+                    for value in self.query.exec(value)? {
+                        let value = serde_json::Value::from(value);
+                        results.push(value);
+                    }
+                    Ok(())
+                })?;
                 a.extend(results);
 
                 Ok(a)
@@ -91,18 +98,17 @@ impl UniScan {
             })
     }
 
-    pub fn scan_file(
+    fn scan_file(
         &self,
         path: &str,
         script_filter: &ScriptFilter,
-    ) -> Result<Vec<serde_json::Value>> {
+        mut emit: impl FnMut(serde_json::Value) -> Result<()>,
+    ) -> Result<()> {
         let (file, data) = self
             .env
             .load_leaf(path)
             .with_context(|| format!("Could not load '{path}'"))?;
         let file = SerializedFileHandle::new(self.env, &file, data.as_ref());
-
-        let mut results = Vec::new();
 
         for mb in file.objects_of::<MonoBehaviour>()? {
             let Some(script) = mb.mono_script()? else {
@@ -118,13 +124,10 @@ impl UniScan {
                 data_obj.insert("_type".into(), script.full_name().into());
                 data_obj.insert("_asm".into(), script.assembly_name().into());
 
-                for value in self.query.exec(data)? {
-                    let value = serde_json::Value::from(value);
-                    results.push(value);
-                }
+                emit(data)?;
             }
         }
 
-        Ok(results)
+        Ok(())
     }
 }
