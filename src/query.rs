@@ -63,7 +63,9 @@ impl QueryRunner {
     }
 
     pub fn new(query: &str) -> Result<Self> {
-        let loader = load::Loader::new(jaq_std::defs().chain(jaq_json::defs()));
+        let uniscan_defs = load::parse(include_str!("defs.jq"), |p| p.defs()).unwrap();
+
+        let loader = load::Loader::new(jaq_std::defs().chain(jaq_json::defs()).chain(uniscan_defs));
 
         let program = load::File {
             code: query,
