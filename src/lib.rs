@@ -106,32 +106,7 @@ impl UniScan {
                     }
 
                     let mut data = mb.cast::<jaq_json::Val>().read()?;
-                    qualify_pptr::qualify_pptrs(path_str, file, &mut data)?;
-
-                    let mut data_obj = match data {
-                        jaq_json::Val::Obj(obj) => {
-                            Rc::into_inner(obj).expect("references hanging around")
-                        }
-                        _ => unreachable!(),
-                    };
-                    data_obj.insert(Rc::new("_file".into()), path_str.to_owned().into());
-                    data_obj.insert(
-                        Rc::new("_type".into()),
-                        script.full_name().into_owned().into(),
-                    );
-                    data_obj.insert(
-                        Rc::new("_asm".into()),
-                        script.assembly_name().into_owned().into(),
-                    );
-                    if let Some(scene_index) = path_str
-                        .strip_prefix("level")
-                        .and_then(|x| x.parse::<usize>().ok())
-                    {
-                        let scene_name = &self.scene_names[scene_index];
-                        data_obj.insert(Rc::new("_scene".into()), scene_name.clone().into());
-                    }
-                    let data = jaq_json::Val::obj(data_obj);
-
+                    self.enrich_object(path_str, file, script, &mut data)?;
                     for value in self.query.exec(data)? {
                         results.push(serde_json::Value::from(value));
                     }
@@ -177,4 +152,52 @@ impl UniScan {
 
         Ok(())
     }
+
+    fn enrich_object(
+        &self,
+        path_str: &str,
+        file: &SerializedFileHandle<'_>,
+        script: &MonoScript,
+        data: &mut jaq_json::Val,
+    ) -> Result<(), anyhow::Error> {
+        qualify_pptr::qualify_pptrs(path_str, file, data)?;
+        enrich_object(data, path_str, file, script, Some(&self.scene_names))?;
+        Ok(())
+    }
+}
+
+pub(crate) fn enrich_object(
+    data: &mut jaq_json::Val,
+    path_str: &str,
+    file: &SerializedFileHandle<'_>,
+    script: &MonoScript,
+    scene_names: Option<&[String]>,
+) -> Result<(), anyhow::Error> {
+    qualify_pptr::qualify_pptrs(path_str, file, data)?;
+
+    let mut data_obj = match std::mem::take(data) {
+        jaq_json::Val::Obj(obj) => Rc::into_inner(obj).expect("references hanging around"),
+        _ => unreachable!(),
+    };
+    data_obj.insert(Rc::new("_file".into()), path_str.to_owned().into());
+    data_obj.insert(
+        Rc::new("_type".into()),
+        script.full_name().into_owned().into(),
+    );
+    data_obj.insert(
+        Rc::new("_asm".into()),
+        script.assembly_name().into_owned().into(),
+    );
+
+    if let Some(scene_names) = scene_names
+        && let Some(scene_index) = path_str
+            .strip_prefix("level")
+            .and_then(|x| x.parse::<usize>().ok())
+    {
+        let scene_name = &scene_names[scene_index];
+        data_obj.insert(Rc::new("_scene".into()), scene_name.clone().into());
+    }
+
+    *data = jaq_json::Val::obj(data_obj);
+    Ok(())
 }
