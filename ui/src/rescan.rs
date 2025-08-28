@@ -1,0 +1,45 @@
+use anyhow::Result;
+use std::path::Path;
+use std::sync::{Arc, Mutex};
+
+use uniscan::{ScriptFilter, UniScan};
+use xilem::core::MessageProxy;
+use xilem::tokio::sync::mpsc::UnboundedReceiver;
+use xilem::tokio::{self};
+
+use crate::utils;
+
+pub struct ScanSettings {
+    pub query: String,
+    pub script: ScriptFilter,
+}
+pub async fn worker(
+    proxy: MessageProxy<Result<Vec<serde_json::Value>>>,
+    mut rx: UnboundedReceiver<ScanSettings>,
+) {
+    let path = "/home/jakob/.local/share/Steam/steamapps/common/Hollow Knight/hollow_knight_Data";
+    let uniscan = Arc::new(Mutex::new(UniScan::new(Path::new(path), ".").unwrap()));
+
+    let mut buffer = Vec::new();
+    loop {
+        rx.recv_many(&mut buffer, usize::MAX).await;
+        let Some(scan) = buffer.pop() else {
+            break;
+        };
+        buffer.clear();
+
+        let uniscan = Arc::clone(&uniscan);
+
+        let result = tokio::task::spawn_blocking(move || {
+            let mut uniscan = uniscan.lock().unwrap();
+            uniscan.query.set_query(&scan.query)?;
+            utils::time("rescan", || uniscan.scan_all(&scan.script))
+        })
+        .await
+        .map_err(|e| anyhow::anyhow!("{}", e))
+        .flatten();
+        if proxy.message(result).is_err() {
+            eprintln!("Could not send rescan result to UI");
+        }
+    }
+}
