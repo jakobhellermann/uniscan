@@ -2,16 +2,16 @@ use anyhow::Result;
 use xilem::core::MessageProxy;
 use xilem::tokio::sync::mpsc::UnboundedReceiver;
 
-pub type Answer = ();
+pub type Response = ();
 
-pub enum Command {
+pub enum Request {
     Save(String),
 }
 
-pub async fn worker(proxy: MessageProxy<Result<Answer>>, mut rx: UnboundedReceiver<Command>) {
+pub async fn worker(proxy: MessageProxy<Result<Response>>, mut rx: UnboundedReceiver<Request>) {
     while let Some(item) = rx.recv().await {
         let result = match item {
-            Command::Save(data) => save(data).await,
+            Request::Save(data) => save(data).await,
         };
         if proxy.message(result).is_err() {
             eprintln!("Could not send rescan result to UI");

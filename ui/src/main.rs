@@ -1,7 +1,6 @@
-mod rescan;
-mod save;
 mod utils;
 mod widgets;
+mod workers;
 
 use anyhow::Result;
 use masonry::properties::types::Length;
@@ -16,8 +15,9 @@ use xilem::view::{
 };
 use xilem::{Color, EventLoop, WidgetView, WindowOptions, Xilem};
 
-use crate::rescan::ScanSettings;
-use crate::widgets::{NumberInputState, margin, number_input};
+use widgets::{NumberInputState, margin, number_input};
+
+use crate::workers::{generic, rescan};
 
 pub const COLOR_ERROR: Color = Color::from_rgb8(255, 51, 51);
 pub const BACKGROUND_COLOR: Color = Color::from_rgb8(18, 18, 20);
@@ -37,8 +37,8 @@ struct App {
     results: Option<(Vec<serde_json::Value>, usize)>,
     error: Result<()>,
 
-    sender: Option<UnboundedSender<ScanSettings>>,
-    save_sender: Option<UnboundedSender<save::Command>>,
+    sender_rescan: Option<UnboundedSender<rescan::Request>>,
+    sender_generic: Option<UnboundedSender<generic::Request>>,
 }
 
 impl Default for App {
@@ -50,8 +50,9 @@ impl Default for App {
             limit: NumberInputState::new(500),
             results: None,
             error: Result::Ok(()),
-            sender: None,
-            save_sender: None,
+
+            sender_rescan: None,
+            sender_generic: None,
         }
     }
 }
@@ -76,7 +77,7 @@ impl App {
             other => other.to_owned(),
         };
 
-        let _ = self.sender.as_ref().unwrap().send(ScanSettings {
+        self.send_rescan_command(rescan::Request {
             query,
             script: self.script_filter.clone(),
             limit: self.limit.last_valid,
@@ -102,14 +103,17 @@ impl App {
         Ok(())
     }
 
-    fn send_command(&self, cmd: save::Command) {
-        let _ = self.save_sender.as_ref().unwrap().send(cmd);
+    fn send_rescan_command(&self, cmd: rescan::Request) {
+        let _ = self.sender_rescan.as_ref().unwrap().send(cmd);
+    }
+    fn send_command(&self, cmd: generic::Request) {
+        let _ = self.sender_generic.as_ref().unwrap().send(cmd);
     }
 
     pub fn save(&mut self) -> Result<()> {
         let results = self.results();
         let formatted = serde_json::to_string_pretty(&results)?;
-        self.send_command(save::Command::Save(formatted));
+        self.send_command(generic::Request::Save(formatted));
 
         Ok(())
     }
@@ -202,12 +206,17 @@ impl App {
             .background_color(BACKGROUND_COLOR),
             (
                 worker(
-                    rescan::worker,
+                    workers::generic::worker,
+                    |state: &mut App, sender| state.sender_generic = Some(sender),
+                    App::set_error,
+                ),
+                worker(
+                    workers::rescan::worker,
                     |state: &mut App, sender| {
-                        state.sender = Some(sender);
+                        state.sender_rescan = Some(sender);
                         state.reload();
                     },
-                    |state, res: Result<rescan::Answer>| match res {
+                    |state, res: Result<rescan::Response>| match res {
                         Ok(res) => {
                             state.error = Ok(());
                             state.results = Some(res);
@@ -216,11 +225,6 @@ impl App {
                             state.error = Err(e);
                         }
                     },
-                ),
-                worker(
-                    save::worker,
-                    |state: &mut App, sender| state.save_sender = Some(sender),
-                    App::set_error,
                 ),
             ),
         )
