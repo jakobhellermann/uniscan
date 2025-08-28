@@ -50,9 +50,12 @@ pub fn qualify_pptrs<R: EnvResolver, P: TypeTreeProvider>(
                             external.pathName.clone()
                         };
 
+                        let class_id = file.deref(pptr.typed::<()>())?.object.info.m_ClassID;
+
                         let mut obj = jaq_json::Map::default();
                         obj.insert(Rc::new("file".into()), pptr_file.into());
                         obj.insert(Rc::new("path_id".into()), path_id.into());
+                        obj.insert(Rc::new("class_id".into()), format!("{class_id:?}").into());
                         jaq_json::Val::Obj(Rc::new(obj))
                     }
                     None => jaq_json::Val::Null,

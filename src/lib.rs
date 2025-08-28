@@ -123,6 +123,13 @@ impl UniScan {
                         Rc::new("_asm".into()),
                         script.assembly_name().into_owned().into(),
                     );
+                    if let Some(scene_index) = path_str
+                        .strip_prefix("level")
+                        .and_then(|x| x.parse::<usize>().ok())
+                    {
+                        let scene_name = &self.scene_names[scene_index];
+                        data_obj.insert(Rc::new("_scene".into()), scene_name.clone().into());
+                    }
                     let data = jaq_json::Val::obj(data_obj);
 
                     for value in self.query.exec(data)? {
