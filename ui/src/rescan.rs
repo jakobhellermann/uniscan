@@ -1,6 +1,6 @@
 use anyhow::Result;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, PoisonError};
 
 use uniscan::{ScriptFilter, UniScan};
 use xilem::core::MessageProxy;
@@ -31,7 +31,7 @@ pub async fn worker(
         let uniscan = Arc::clone(&uniscan);
 
         let result = tokio::task::spawn_blocking(move || {
-            let mut uniscan = uniscan.lock().unwrap();
+            let mut uniscan = uniscan.lock().unwrap_or_else(PoisonError::into_inner);
             uniscan.query.set_query(&scan.query)?;
             utils::time("rescan", || uniscan.scan_all(&scan.script))
         })
