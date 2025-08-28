@@ -121,7 +121,14 @@ fn app_logic(data: &mut App) -> impl WidgetView<App> + use<> {
                 let path = "/home/jakob/.local/share/Steam/steamapps/common/Hollow Knight/hollow_knight_Data";
                 let uniscan = Arc::new(Mutex::new(UniScan::new(&Path::new(path), ".").unwrap()));
 
-                while let Some(scan) = rx.recv().await {
+                let mut buffer = Vec::new();
+                loop {
+                    rx.recv_many(&mut buffer, usize::MAX).await;
+                    let Some(scan) = buffer.pop() else {
+                        break;
+                    };
+                    buffer.clear();
+
                     let uniscan = Arc::clone(&uniscan);
 
                     let result = tokio::task::spawn_blocking(move || {
