@@ -1,7 +1,5 @@
 use anyhow::{Context, Result};
-use rabex_env::EnvResolver;
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
-use std::collections::BTreeMap;
 use std::path::Path;
 use uniscan::{ScriptFilter, UniScan};
 
@@ -14,39 +12,26 @@ fn main() -> Result<()> {
     let script_filter = ScriptFilter::new(&script_filter);
     let uniscan = UniScan::new(Path::new(&game_dir), filter.as_deref().unwrap_or("."))?;
 
-    let all = uniscan
-        .env
-        .resolver
-        .serialized_files()?
-        .par_iter()
-        .map(|path| -> Result<_> {
-            let path_str = path.to_str().unwrap();
-
-            let level_index = path
-                .file_name()
-                .and_then(|p| p.to_str())
-                .and_then(|p| p.strip_prefix("level"))
-                .and_then(|x| x.parse::<usize>().ok());
-
-            let scene_name = match level_index {
-                Some(index) => &uniscan.scene_names[index],
-                None => path_str,
-            };
-
-            let results = uniscan.scan_file(path_str, &script_filter)?;
-
-            let mut map = BTreeMap::default();
-            if !results.is_empty() {
-                map.insert(scene_name.to_owned(), results);
-            }
-            Ok(map)
-        })
-        .try_reduce(BTreeMap::default, |mut a, b| {
-            a.extend(b);
-            Ok(a)
-        })?;
-
-    println!("{}", serde_json::to_string_pretty(&all)?);
+    let all = uniscan.scan_all(&script_filter)?;
+    print_all(&all);
 
     Ok(())
+}
+
+fn print_all(all: &[serde_json::Value]) {
+    all.par_iter()
+        .map(|item| match serde_json::to_string_pretty(&item) {
+            Ok(item) => Some(format!("{}", item)),
+            Err(e) => {
+                eprintln!("{}", e);
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .iter()
+        .for_each(|x| {
+            if let Some(x) = x {
+                println!("{}", x);
+            }
+        })
 }

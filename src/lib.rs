@@ -80,17 +80,6 @@ impl UniScan {
             .try_fold(Vec::new, |mut a, path| -> Result<_> {
                 let path_str = path.to_str().unwrap();
 
-                /*let level_index = path
-                    .file_name()
-                    .and_then(|p| p.to_str())
-                    .and_then(|p| p.strip_prefix("level"))
-                    .and_then(|x| x.parse::<usize>().ok());
-
-                let scene_name = match level_index {
-                    Some(index) => &self.scene_names[index],
-                    None => path_str,
-                };*/
-
                 let results = self.scan_file(path_str, script_filter)?;
                 a.extend(results);
 
