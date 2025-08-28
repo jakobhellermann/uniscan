@@ -9,7 +9,7 @@ use anyhow::{Context, Result};
 use rabex::tpk::TpkTypeTreeBlob;
 use rabex::typetree::typetree_cache::sync::TypeTreeCache;
 use rabex_env::game_files::GameFiles;
-use rabex_env::handle::SerializedFileHandle;
+use rabex_env::handle::{ObjectRefHandle, SerializedFileHandle};
 use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::{EnvResolver, Environment};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
@@ -83,8 +83,16 @@ impl UniScan {
                 let path_str = path.to_str().unwrap();
 
                 let mut results = Vec::new();
-                self.scan_file(path_str, script_filter, |value| {
-                    for value in self.query.exec(value)? {
+                self.scan_file(path_str, script_filter, |file, script, mb| {
+                    let mut data = mb.cast::<JsonValue>().read()?;
+                    qualify_pptr::qualify_pptrs(path_str, &file, &mut data)?;
+
+                    let data_obj = data.as_object_mut().unwrap();
+                    data_obj.insert("_file".into(), path_str.to_owned().into());
+                    data_obj.insert("_type".into(), script.full_name().into());
+                    data_obj.insert("_asm".into(), script.assembly_name().into());
+
+                    for value in self.query.exec(data)? {
                         let value = JsonValue::from(value);
                         results.push(value);
                     }
@@ -104,7 +112,11 @@ impl UniScan {
         &self,
         path: &str,
         script_filter: &ScriptFilter,
-        mut emit: impl FnMut(JsonValue) -> Result<()>,
+        mut emit: impl FnMut(
+            &SerializedFileHandle,
+            &MonoScript,
+            ObjectRefHandle<MonoBehaviour>,
+        ) -> Result<()>,
     ) -> Result<()> {
         let (file, data) = self
             .env
@@ -118,15 +130,7 @@ impl UniScan {
             };
 
             if script_filter.matches(&script) {
-                let mut data = mb.cast::<JsonValue>().read()?;
-                qualify_pptr::qualify_pptrs(path, &file, &mut data)?;
-
-                let data_obj = data.as_object_mut().unwrap();
-                data_obj.insert("_file".into(), path.to_owned().into());
-                data_obj.insert("_type".into(), script.full_name().into());
-                data_obj.insert("_asm".into(), script.assembly_name().into());
-
-                emit(data)?;
+                emit(&file, &script, mb)?;
             }
         }
 
