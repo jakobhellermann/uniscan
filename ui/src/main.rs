@@ -4,7 +4,7 @@ mod widgets;
 
 use anyhow::Result;
 use masonry::properties::types::Length;
-use uniscan::{JsonValue, ScriptFilter};
+use uniscan::ScriptFilter;
 use winit::error::EventLoopError;
 use xilem::core::fork;
 use xilem::style::{Background, Padding, Style};
@@ -32,7 +32,7 @@ struct App {
     script_filter_raw: String,
     script_filter: ScriptFilter,
 
-    results: Option<(Vec<JsonValue>, usize)>,
+    results: Option<(Vec<serde_json::Value>, usize)>,
     error: Result<()>,
 
     sender: Option<UnboundedSender<ScanSettings>>,
@@ -78,7 +78,7 @@ impl App {
         });
     }
 
-    fn results(&self) -> &[JsonValue] {
+    fn results(&self) -> &[serde_json::Value] {
         match self.results {
             Some((ref values, _)) => values.as_slice(),
             None => &[],

@@ -1,8 +1,6 @@
 pub mod qualify_pptr;
 pub mod query;
 
-pub use serde_json::Value as JsonValue;
-
 use query::QueryRunner;
 
 use anyhow::{Context, Result};
@@ -79,7 +77,7 @@ impl UniScan {
         &self,
         script_filter: &ScriptFilter,
         limit: usize,
-    ) -> Result<(Vec<JsonValue>, usize)> {
+    ) -> Result<(Vec<serde_json::Value>, usize)> {
         let count = AtomicUsize::new(0);
 
         let items = self
@@ -106,7 +104,7 @@ impl UniScan {
                         return Ok(());
                     }
 
-                    let mut data = mb.cast::<JsonValue>().read()?;
+                    let mut data = mb.cast::<serde_json::Value>().read()?;
                     qualify_pptr::qualify_pptrs(path_str, &file, &mut data)?;
 
                     let data_obj = data.as_object_mut().unwrap();
@@ -115,7 +113,7 @@ impl UniScan {
                     data_obj.insert("_asm".into(), script.assembly_name().into());
 
                     for value in self.query.exec(data)? {
-                        let value = JsonValue::from(value);
+                        let value = serde_json::Value::from(value);
                         results.push(value);
                     }
                     Ok(())

@@ -2,12 +2,12 @@ use anyhow::Result;
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use uniscan::{JsonValue, ScriptFilter, UniScan};
+use uniscan::{ScriptFilter, UniScan};
 use xilem::core::MessageProxy;
 use xilem::tokio::sync::mpsc::UnboundedReceiver;
 use xilem::tokio::{self};
 
-pub type Answer = (Vec<JsonValue>, usize);
+pub type Answer = (Vec<serde_json::Value>, usize);
 
 use crate::utils;
 

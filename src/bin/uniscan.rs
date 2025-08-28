@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
 use std::usize;
-use uniscan::{JsonValue, ScriptFilter, UniScan};
+use uniscan::{ScriptFilter, UniScan};
 
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn print_all(all: &[JsonValue]) {
+fn print_all(all: &[serde_json::Value]) {
     all.par_iter()
         .map(|item| match serde_json::to_string_pretty(&item) {
             Ok(item) => Some(format!("{}", item)),
