@@ -4,6 +4,7 @@ mod workers;
 
 use anyhow::Result;
 use masonry::properties::types::Length;
+use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use uniscan::ScriptFilter;
 use winit::error::EventLoopError;
 use xilem::core::fork;
@@ -17,6 +18,7 @@ use xilem::{Color, EventLoop, WidgetView, WindowOptions, Xilem};
 
 use widgets::{NumberInputState, margin, number_input};
 
+use crate::utils::time;
 use crate::workers::{generic, rescan};
 
 pub const COLOR_ERROR: Color = Color::from_rgb8(255, 51, 51);
@@ -34,7 +36,8 @@ struct App {
     script_filter: ScriptFilter,
     limit: NumberInputState<usize>,
 
-    results: Option<(Vec<serde_json::Value>, usize)>,
+    results_all: Option<(Vec<serde_json::Value>, usize)>,
+    results_filtered: Option<Vec<serde_json::Value>>,
     error: Result<()>,
 
     sender_rescan: Option<UnboundedSender<rescan::Request>>,
@@ -48,7 +51,8 @@ impl Default for App {
             script_filter: ScriptFilter::new("GeoRock"),
             script_filter_raw: "GeoRock".into(),
             limit: NumberInputState::new(500),
-            results: None,
+            results_all: None,
+            results_filtered: None,
             error: Result::Ok(()),
 
             sender_rescan: None,
@@ -60,7 +64,8 @@ impl Default for App {
 impl App {
     fn set_query(&mut self, query: String) {
         self.query_raw = query;
-        self.reload();
+
+        self.reload_query();
     }
     fn set_script_filter(&mut self, script_filter: String) {
         self.script_filter_raw = script_filter;
@@ -71,24 +76,62 @@ impl App {
         }
     }
 
-    fn reload(&self) {
-        let query = match self.query_raw.as_str() {
+    fn real_query(&self) -> String {
+        match self.query_raw.as_str() {
             "" => ".".into(),
             other => other.to_owned(),
-        };
+        }
+    }
 
+    fn reload(&self) {
         self.send_rescan_command(rescan::Request {
-            query,
+            query: self.real_query(),
             script: self.script_filter.clone(),
             limit: self.limit.last_valid,
         });
     }
 
-    fn results(&self) -> &[serde_json::Value] {
-        match self.results {
-            Some((ref values, _)) => values.as_slice(),
-            None => &[],
+    // TODO async
+    fn reload_query(&mut self) {
+        match uniscan::query::QueryRunner::new(&self.real_query()) {
+            Ok(runner) => {
+                self.error = Ok(());
+                if let Some((results, _)) = &self.results_all {
+                    time("filter", || {
+                        let result = results
+                            .par_iter()
+                            .try_fold(Vec::new, |mut acc, item| -> Result<_> {
+                                let mapped = runner.exec_jaq(From::from(item))?;
+                                acc.extend(mapped.into_iter().map(serde_json::Value::from));
+                                Ok(acc)
+                            })
+                            .try_reduce(Vec::new, |mut a, b| {
+                                a.extend(b);
+                                Ok(a)
+                            });
+                        match result {
+                            Ok(data) => {
+                                self.results_filtered = Some(data);
+                                self.error = Ok(());
+                            }
+                            Err(err) => {
+                                self.error = Err(err);
+                            }
+                        }
+                    });
+                }
+            }
+            Err(e) => {
+                self.error = Err(e);
+            }
         }
+    }
+
+    fn results(&self) -> &[serde_json::Value] {
+        self.results_filtered.as_deref().unwrap_or_default()
+    }
+    fn result_count(&self) -> Option<usize> {
+        self.results_all.as_ref().map(|(_, count)| *count)
     }
 
     pub fn export(&mut self) -> Result<()> {
@@ -136,7 +179,7 @@ impl App {
                 let results = state.results();
 
                 if index == results.len() {
-                    let missing = match state.results {
+                    let missing = match state.results_all {
                         Some((ref data, count)) => count - data.len(),
                         None => 0,
                     };
@@ -163,7 +206,7 @@ impl App {
             },
         );
 
-        let can_export = self.results.as_ref().is_some_and(|x| x.1 != 0);
+        let can_export = self.results_all.as_ref().is_some_and(|x| x.1 != 0);
 
         fork(
             flex_col((
@@ -173,9 +216,8 @@ impl App {
                     .err()
                     .map(|e| label(format!("{:?}", e)).color(COLOR_ERROR).boxed())
                     .unwrap_or_else(|| label("").boxed()),
-                self.results
-                    .as_ref()
-                    .map(|(_, count)| label(format!("Found {} results", count))),
+                self.result_count()
+                    .map(|count| label(format!("Found {} results", count))),
                 sized_box(content).expand_height().flex(1.0),
                 flex_row((
                     label("Limit:"),
@@ -215,11 +257,13 @@ impl App {
                     |state: &mut App, sender| {
                         state.sender_rescan = Some(sender);
                         state.reload();
+                        state.reload_query();
                     },
                     |state, res: Result<rescan::Response>| match res {
                         Ok(res) => {
                             state.error = Ok(());
-                            state.results = Some(res);
+                            state.results_all = Some(res);
+                            state.reload_query();
                         }
                         Err(e) => {
                             state.error = Err(e);

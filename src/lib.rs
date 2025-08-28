@@ -107,7 +107,7 @@ impl UniScan {
 
                     let mut data = mb.cast::<jaq_json::Val>().read()?;
                     self.enrich_object(path_str, file, script, &mut data)?;
-                    for value in self.query.exec(data)? {
+                    for value in self.query.exec_jaq(data)? {
                         results.push(serde_json::Value::from(value));
                     }
                     Ok(())
@@ -122,6 +122,30 @@ impl UniScan {
             })?;
 
         Ok((items, count.into_inner()))
+    }
+
+    pub fn scan_all_candidates(
+        &self,
+        script_filter: &ScriptFilter,
+    ) -> Result<Vec<serde_json::Value>> {
+        self.env
+            .resolver
+            .serialized_files()?
+            .par_iter()
+            .try_fold(Vec::new, |mut a, path| -> Result<_> {
+                let path_str = path.to_str().unwrap();
+                self.scan_file(path_str, script_filter, |file, script, mb| {
+                    let mut data = mb.cast::<jaq_json::Val>().read()?;
+                    self.enrich_object(path_str, file, script, &mut data)?;
+                    a.push(serde_json::Value::from(data));
+                    Ok(())
+                })?;
+                Ok(a)
+            })
+            .try_reduce(Vec::new, |mut a, b| {
+                a.extend(b);
+                Ok(a)
+            })
     }
 
     fn scan_file(

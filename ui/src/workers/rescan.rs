@@ -24,8 +24,8 @@ pub async fn worker(proxy: MessageProxy<Result<Response>>, rx: UnboundedReceiver
         let uniscan = Arc::clone(&uniscan);
         async move {
             tokio::task::spawn_blocking(move || {
-                let mut uniscan = uniscan.lock().unwrap_or_else(PoisonError::into_inner);
-                uniscan.query.set_query(&scan.query)?;
+                let uniscan = uniscan.lock().unwrap_or_else(PoisonError::into_inner);
+                // uniscan.query.set_query(&scan.query)?;
                 utils::time("rescan", || uniscan.scan_all(&scan.script, scan.limit))
             })
             .await

@@ -136,7 +136,11 @@ impl QueryRunner {
         Ok(QueryRunner { filter })
     }
 
-    pub fn exec(&self, item: jaq_json::Val) -> Result<Vec<jaq_json::Val>> {
+    pub fn exec_serde(&self, item: serde_json::Value) -> Result<Vec<jaq_json::Val>> {
+        self.exec_jaq(item.into())
+    }
+
+    pub fn exec_jaq(&self, item: jaq_json::Val) -> Result<Vec<jaq_json::Val>> {
         let inputs = jaq_std::input::RcIter::new(core::iter::empty());
         let data = Data {
             lut: &self.filter.lut,

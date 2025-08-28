@@ -3545,6 +3545,7 @@ dependencies = [
  "opener",
  "rabex",
  "rabex-env",
+ "rayon",
  "rfd",
  "serde_json",
  "tracing",
