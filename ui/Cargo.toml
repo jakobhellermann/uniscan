@@ -4,13 +4,13 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-masonry = { git = "https://github.com/linebender/xilem", version = "0.3.0" }
-masonry_winit = { git = "https://github.com/linebender/xilem", version = "0.3.0" }
+masonry = { git = "https://github.com/linebender/xilem", rev = "f40a430" }
+masonry_winit = { git = "https://github.com/linebender/xilem", rev = "f40a430" }
 rabex-env.workspace = true
 rabex.workspace = true
 uniscan = { version = "0.1", path = ".." }
 winit = "0.30"
-xilem = { git = "https://github.com/linebender/xilem", version = "0.3.0" }
+xilem = { git = "https://github.com/linebender/xilem", rev = "f40a430" }
 serde_json = "1.0"
 anyhow = "1.0"
 tracing = "0.1"

@@ -1572,7 +1572,7 @@ dependencies = [
 [[package]]
 name = "masonry"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem#74a790708c95f6d0d0e654b2efb459b7fd97c456"
+source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
 dependencies = [
  "accesskit",
  "dpi",
@@ -1586,7 +1586,7 @@ dependencies = [
 [[package]]
 name = "masonry_core"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem#74a790708c95f6d0d0e654b2efb459b7fd97c456"
+source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
 dependencies = [
  "accesskit",
  "anymap3",
@@ -1608,7 +1608,7 @@ dependencies = [
 [[package]]
 name = "masonry_winit"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem#74a790708c95f6d0d0e654b2efb459b7fd97c456"
+source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
 dependencies = [
  "accesskit_winit",
  "copypasta",
@@ -3069,7 +3069,7 @@ dependencies = [
 [[package]]
 name = "tree_arena"
 version = "0.1.0"
-source = "git+https://github.com/linebender/xilem#74a790708c95f6d0d0e654b2efb459b7fd97c456"
+source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
 dependencies = [
  "hashbrown",
 ]
@@ -4226,7 +4226,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 [[package]]
 name = "xilem"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem#74a790708c95f6d0d0e654b2efb459b7fd97c456"
+source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
 dependencies = [
  "masonry",
  "masonry_winit",
@@ -4240,7 +4240,7 @@ dependencies = [
 [[package]]
 name = "xilem_core"
 version = "0.3.0"
-source = "git+https://github.com/linebender/xilem#74a790708c95f6d0d0e654b2efb459b7fd97c456"
+source = "git+https://github.com/linebender/xilem?rev=f40a430#f40a43092a973564323ec45edd7ff7ea009380a2"
 dependencies = [
  "anymore",
  "hashbrown",

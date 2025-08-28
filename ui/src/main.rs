@@ -11,7 +11,8 @@ use xilem::core::fork;
 use xilem::style::{Padding, Style};
 use xilem::tokio::sync::mpsc::UnboundedSender;
 use xilem::view::{
-    FlexExt, button, flex, flex_row, label, prose, sized_box, text_input, virtual_scroll, worker,
+    FlexExt, button, flex_col, flex_row, label, prose, sized_box, text_input, virtual_scroll,
+    worker,
 };
 use xilem::{EventLoop, WidgetView, WindowOptions, Xilem};
 
@@ -85,7 +86,7 @@ impl App {
         ));
         let content = virtual_scroll(0..self.results().len() as i64, |state: &mut App, index| {
             let Some(value) = state.results().get(index as usize) else {
-                return flex(()).boxed();
+                return flex_col(()).boxed();
             };
 
             let val = serde_json::to_string_pretty(&value).unwrap();
@@ -100,7 +101,7 @@ impl App {
         });
 
         fork(
-            flex((
+            flex_col((
                 search,
                 label(format!("{}", self.query_raw)),
                 label(match self.status {
