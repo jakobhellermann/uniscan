@@ -1,6 +1,8 @@
 pub mod qualify_pptr;
 pub mod query;
 
+pub use serde_json::Value as JsonValue;
+
 use query::QueryRunner;
 
 use anyhow::{Context, Result};
@@ -72,7 +74,7 @@ impl UniScan {
         })
     }
 
-    pub fn scan_all(&self, script_filter: &ScriptFilter) -> Result<Vec<serde_json::Value>> {
+    pub fn scan_all(&self, script_filter: &ScriptFilter) -> Result<Vec<JsonValue>> {
         self.env
             .resolver
             .serialized_files()?
@@ -83,7 +85,7 @@ impl UniScan {
                 let mut results = Vec::new();
                 self.scan_file(path_str, script_filter, |value| {
                     for value in self.query.exec(value)? {
-                        let value = serde_json::Value::from(value);
+                        let value = JsonValue::from(value);
                         results.push(value);
                     }
                     Ok(())
@@ -102,7 +104,7 @@ impl UniScan {
         &self,
         path: &str,
         script_filter: &ScriptFilter,
-        mut emit: impl FnMut(serde_json::Value) -> Result<()>,
+        mut emit: impl FnMut(JsonValue) -> Result<()>,
     ) -> Result<()> {
         let (file, data) = self
             .env
@@ -116,7 +118,7 @@ impl UniScan {
             };
 
             if script_filter.matches(&script) {
-                let mut data = mb.cast::<serde_json::Value>().read()?;
+                let mut data = mb.cast::<JsonValue>().read()?;
                 qualify_pptr::qualify_pptrs(path, &file, &mut data)?;
 
                 let data_obj = data.as_object_mut().unwrap();

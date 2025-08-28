@@ -1,3 +1,4 @@
+use crate::JsonValue;
 use anyhow::{Context as _, Result};
 use rabex::objects::PPtr;
 use rabex::objects::pptr::{FileId, PathId};
@@ -14,15 +15,15 @@ pub struct QualifiedPPtr {
 pub fn qualify_pptrs<R: EnvResolver, P: TypeTreeProvider>(
     file_path: &str,
     file: &SerializedFileHandle<'_, R, P>,
-    value: &mut serde_json::Value,
+    value: &mut JsonValue,
 ) -> Result<()> {
     *value = match value {
-        serde_json::Value::Array(values) => {
+        JsonValue::Array(values) => {
             return values
                 .iter_mut()
                 .try_for_each(|x| qualify_pptrs(file_path, file, x));
         }
-        serde_json::Value::Object(map) => {
+        JsonValue::Object(map) => {
             if map.len() == 2
                 && let Some(file_id) = map.get("m_FileID").and_then(|x| x.as_number()?.as_i64())
                 && let Some(path_id) = map.get("m_PathID").and_then(|x| x.as_number()?.as_i64())
@@ -43,7 +44,7 @@ pub fn qualify_pptrs<R: EnvResolver, P: TypeTreeProvider>(
                             "path_id": path_id,
                         })
                     }
-                    None => serde_json::Value::Null,
+                    None => JsonValue::Null,
                 }
             } else {
                 return map

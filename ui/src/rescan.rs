@@ -2,7 +2,7 @@ use anyhow::Result;
 use std::path::Path;
 use std::sync::{Arc, Mutex, PoisonError};
 
-use uniscan::{ScriptFilter, UniScan};
+use uniscan::{JsonValue, ScriptFilter, UniScan};
 use xilem::core::MessageProxy;
 use xilem::tokio::sync::mpsc::UnboundedReceiver;
 use xilem::tokio::{self};
@@ -14,7 +14,7 @@ pub struct ScanSettings {
     pub script: ScriptFilter,
 }
 pub async fn worker(
-    proxy: MessageProxy<Result<Vec<serde_json::Value>>>,
+    proxy: MessageProxy<Result<Vec<JsonValue>>>,
     mut rx: UnboundedReceiver<ScanSettings>,
 ) {
     let path = "/home/jakob/.local/share/Steam/steamapps/common/Hollow Knight/hollow_knight_Data";

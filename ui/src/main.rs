@@ -5,7 +5,7 @@ mod widgets;
 use anyhow::Result;
 use masonry::peniko::color::AlphaColor;
 use masonry::properties::types::Length;
-use uniscan::ScriptFilter;
+use uniscan::{JsonValue, ScriptFilter};
 use winit::error::EventLoopError;
 use xilem::core::fork;
 use xilem::style::{Padding, Style};
@@ -23,7 +23,7 @@ struct App {
     script_filter_raw: String,
     script_filter: ScriptFilter,
 
-    results: Option<Vec<serde_json::Value>>,
+    results: Option<Vec<JsonValue>>,
     status: Result<()>,
 
     sender: Option<UnboundedSender<ScanSettings>>,
@@ -68,7 +68,7 @@ impl App {
         });
     }
 
-    fn results(&self) -> &[serde_json::Value] {
+    fn results(&self) -> &[JsonValue] {
         self.results.as_deref().unwrap_or_default()
     }
 
@@ -124,7 +124,7 @@ impl App {
                     state.sender = Some(sender);
                     state.reload();
                 },
-                |state, res: Result<Vec<serde_json::Value>>| match res {
+                |state, res: Result<Vec<JsonValue>>| match res {
                     Ok(res) => {
                         state.status = Ok(());
                         state.results = Some(res);

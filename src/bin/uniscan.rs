@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
-use uniscan::{ScriptFilter, UniScan};
+use uniscan::{JsonValue, ScriptFilter, UniScan};
 
 fn main() -> Result<()> {
     let mut args = std::env::args().skip(1);
@@ -18,7 +18,7 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn print_all(all: &[serde_json::Value]) {
+fn print_all(all: &[JsonValue]) {
     all.par_iter()
         .map(|item| match serde_json::to_string_pretty(&item) {
             Ok(item) => Some(format!("{}", item)),
