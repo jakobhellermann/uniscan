@@ -27,7 +27,7 @@ struct App {
     script_filter_raw: String,
     script_filter: ScriptFilter,
 
-    results: Option<Vec<JsonValue>>,
+    results: Option<(Vec<JsonValue>, usize)>,
     status: Result<()>,
 
     sender: Option<UnboundedSender<ScanSettings>>,
@@ -69,11 +69,15 @@ impl App {
         let _ = self.sender.as_ref().unwrap().send(ScanSettings {
             query,
             script: self.script_filter.clone(),
+            limit: 1000,
         });
     }
 
     fn results(&self) -> &[JsonValue] {
-        self.results.as_deref().unwrap_or_default()
+        match self.results {
+            Some((ref values, _)) => values.as_slice(),
+            None => &[],
+        }
     }
 
     fn ui(&mut self) -> impl WidgetView<App> + use<> {
@@ -87,21 +91,39 @@ impl App {
             ))
             .width(Length::px(180.)),
         ));
-        let content = virtual_scroll(0..self.results().len() as i64, |state: &mut App, index| {
-            let Some(value) = state.results().get(index as usize) else {
-                return flex_col(()).boxed();
-            };
+        let content = virtual_scroll(
+            0..self.results().len() as i64 + 1,
+            |state: &mut App, index| {
+                let index = index as usize;
+                let results = state.results();
 
-            let val = serde_json::to_string_pretty(&value).unwrap();
+                if index == results.len() {
+                    let missing = match state.results {
+                        Some((ref data, count)) => count - data.len(),
+                        None => 0,
+                    };
+                    return label(match missing {
+                        0 => String::new(),
+                        n => format!("... ({n} more)"),
+                    })
+                    .boxed();
+                }
 
-            margin(
-                sized_box(prose(val))
-                    .background_color(AlphaColor::from_rgb8(43, 69, 86))
-                    .padding(4.),
-                Padding::bottom(8.),
-            )
-            .boxed()
-        });
+                let Some(value) = results.get(index) else {
+                    return flex_col(()).boxed();
+                };
+
+                let val = serde_json::to_string_pretty(&value).unwrap();
+
+                margin(
+                    sized_box(prose(val))
+                        .background_color(AlphaColor::from_rgb8(43, 69, 86))
+                        .padding(4.),
+                    Padding::bottom(8.),
+                )
+                .boxed()
+            },
+        );
 
         fork(
             flex_col((
@@ -111,8 +133,8 @@ impl App {
                     Err(ref e) => format!("{:?}", e),
                     Ok(()) => "".into(),
                 }),
-                label(match self.results.as_deref() {
-                    Some(results) => format!("Found {} results", results.len()),
+                label(match self.results {
+                    Some((_, count)) => format!("Found {} results", count),
                     None => "".into(),
                 }),
                 sized_box(content).expand_height().flex(1.0),
@@ -128,7 +150,7 @@ impl App {
                     state.sender = Some(sender);
                     state.reload();
                 },
-                |state, res: Result<Vec<JsonValue>>| match res {
+                |state, res: Result<rescan::Answer>| match res {
                     Ok(res) => {
                         state.status = Ok(());
                         state.results = Some(res);

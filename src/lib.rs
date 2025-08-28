@@ -14,6 +14,7 @@ use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::{EnvResolver, Environment};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use typetree_generator_api::GeneratorBackend;
 
 pub struct UniScan {
@@ -74,16 +75,37 @@ impl UniScan {
         })
     }
 
-    pub fn scan_all(&self, script_filter: &ScriptFilter) -> Result<Vec<JsonValue>> {
-        self.env
+    pub fn scan_all(
+        &self,
+        script_filter: &ScriptFilter,
+        limit: usize,
+    ) -> Result<(Vec<JsonValue>, usize)> {
+        let count = AtomicUsize::new(0);
+
+        let items = self
+            .env
             .resolver
             .serialized_files()?
             .par_iter()
             .try_fold(Vec::new, |mut a, path| -> Result<_> {
                 let path_str = path.to_str().unwrap();
 
+                if count.load(Ordering::Relaxed) > limit {
+                    let mut i = 0;
+                    self.scan_file(path_str, script_filter, |_, _, _| {
+                        i += 1;
+                        Ok(())
+                    })?;
+                    count.fetch_add(i, Ordering::Relaxed);
+                    return Ok(a);
+                }
+
                 let mut results = Vec::new();
                 self.scan_file(path_str, script_filter, |file, script, mb| {
+                    if count.fetch_add(1, Ordering::Relaxed) >= limit {
+                        return Ok(());
+                    }
+
                     let mut data = mb.cast::<JsonValue>().read()?;
                     qualify_pptr::qualify_pptrs(path_str, &file, &mut data)?;
 
@@ -105,7 +127,9 @@ impl UniScan {
             .try_reduce(Vec::new, |mut a, b| {
                 a.extend(b);
                 Ok(a)
-            })
+            })?;
+
+        Ok((items, count.into_inner()))
     }
 
     fn scan_file(
