@@ -16,7 +16,7 @@ use xilem::view::{
 use xilem::{Color, EventLoop, WidgetView, WindowOptions, Xilem};
 
 use crate::rescan::ScanSettings;
-use crate::widgets::margin;
+use crate::widgets::{NumberInputState, margin, number_input};
 
 pub const COLOR_ERROR: Color = Color::from_rgb8(255, 51, 51);
 pub const BACKGROUND_COLOR: Color = Color::from_rgb8(18, 18, 20);
@@ -31,6 +31,7 @@ struct App {
     query_raw: String,
     script_filter_raw: String,
     script_filter: ScriptFilter,
+    limit: NumberInputState<usize>,
 
     results: Option<(Vec<serde_json::Value>, usize)>,
     error: Result<()>,
@@ -44,6 +45,7 @@ impl Default for App {
             query_raw: "".into(),
             script_filter: ScriptFilter::new("GeoRock"),
             script_filter_raw: "GeoRock".into(),
+            limit: NumberInputState::new(500),
             results: None,
             error: Result::Ok(()),
             sender: None,
@@ -74,7 +76,7 @@ impl App {
         let _ = self.sender.as_ref().unwrap().send(ScanSettings {
             query,
             script: self.script_filter.clone(),
-            limit: 1000,
+            limit: self.limit.last_valid,
         });
     }
 
@@ -143,6 +145,18 @@ impl App {
                     .map(|(_, count)| label(format!("Found {} results", count))),
                 sized_box(content).expand_height().flex(1.0),
                 flex_row((
+                    label("Limit:"),
+                    sized_box(number_input(
+                        self.limit.clone(),
+                        |state: &mut App, limit| {
+                            let changed = limit.last_valid != state.limit.last_valid;
+                            state.limit = limit;
+                            if changed {
+                                state.reload();
+                            }
+                        },
+                    ))
+                    .width(Length::px(60.)),
                     button("Back", |_: &mut App| {}).background_color(BUTTON_COLOR),
                     button("Export", |_: &mut App| {})
                         .background_color(BUTTON_COLOR)
