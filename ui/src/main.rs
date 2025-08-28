@@ -87,6 +87,26 @@ impl App {
         }
     }
 
+    pub fn export(&mut self) -> Result<()> {
+        let results = self.results();
+
+        let formatted = serde_json::to_string_pretty(&results)?;
+        // TODO: tempfile
+        let path = "/tmp/out.json";
+        std::fs::write(path, &formatted)?;
+        opener::open(path)?;
+
+        Ok(())
+    }
+
+    // TODO
+    pub fn save(&mut self) -> Result<()> {
+        let results = self.results();
+        let _formatted = serde_json::to_string_pretty(&results)?;
+
+        Ok(())
+    }
+
     fn ui(&mut self) -> impl WidgetView<App> + use<> {
         let search = flex_row((
             text_input(self.query_raw.clone(), App::set_query)
@@ -132,6 +152,8 @@ impl App {
             },
         );
 
+        let can_export = self.results.as_ref().is_some_and(|x| x.1 != 0);
+
         fork(
             flex_col((
                 search,
@@ -157,11 +179,14 @@ impl App {
                         },
                     ))
                     .width(Length::px(60.)),
-                    button("Back", |_: &mut App| {}).background_color(BUTTON_COLOR),
-                    button("Export", |_: &mut App| {})
+                    button("Open as JSON", |app: &mut App| app.error = app.export())
                         .background_color(BUTTON_COLOR)
                         .disabled_background(Background::Color(BUTTON_DISABLED_COLOR))
-                        .disabled(self.results.as_ref().is_none_or(|x| x.1 == 0)),
+                        .disabled(!can_export),
+                    button("Save to file", |app: &mut App| app.error = app.save())
+                        .background_color(BUTTON_COLOR)
+                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR))
+                        .disabled(!can_export),
                 ))
                 .main_axis_alignment(MainAxisAlignment::End),
             ))
