@@ -25,3 +25,11 @@ steamlocate = "2.0.1"
 
 [lints]
 workspace = true
+
+[package.metadata.packager]
+product_name = "Uniscan"
+category = "DeveloperTool"
+icons = ["32x32.png"]
+
+[package.metadata.packager.appimage]
+files = { "libTypeTreeGeneratorAPI.so" = "usr/bin/libTypeTreeGeneratorAPI.so" }
