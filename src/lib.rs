@@ -53,6 +53,7 @@ impl ScriptFilter {
 pub struct ScanResults {
     pub items: Vec<serde_json::Value>,
     pub count: usize,
+    pub query_count: usize,
 }
 
 impl UniScan {
@@ -82,6 +83,7 @@ impl UniScan {
 
     pub fn scan_all(&self, script_filter: &ScriptFilter, limit: usize) -> Result<ScanResults> {
         let count = AtomicUsize::new(0);
+        let query_count = AtomicUsize::new(0);
 
         let items =
             par_fold_reduce::<Vec<_>, _>(self.env.resolver.serialized_files()?, |acc, path| {
@@ -94,7 +96,6 @@ impl UniScan {
                     return Ok(());
                 }
 
-                let mut results = Vec::new();
                 self.scan_file(path_str, script_filter, |file, script, mb| {
                     if count.fetch_add(1, Ordering::Relaxed) >= limit {
                         return Ok(());
@@ -102,12 +103,15 @@ impl UniScan {
 
                     let mut data = mb.cast::<jaq_json::Val>().read()?;
                     self.enrich_object(path_str, file, script, &mut data)?;
-                    for value in self.query.exec(data)? {
-                        results.push(serde_json::Value::from(value));
+
+                    let query_result = self.query.exec(data)?;
+                    query_count.fetch_add(query_result.len(), Ordering::SeqCst);
+
+                    for value in query_result {
+                        acc.push(serde_json::Value::from(value));
                     }
                     Ok(())
                 })?;
-                acc.extend(results);
 
                 Ok(())
             })?;
@@ -115,6 +119,7 @@ impl UniScan {
         Ok(ScanResults {
             items,
             count: count.into_inner(),
+            query_count: query_count.into_inner(),
         })
     }
 

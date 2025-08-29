@@ -312,7 +312,7 @@ impl App {
 
                 if index == results.len() {
                     let missing = match state.main.results {
-                        Some(ref scan) => scan.count - scan.items.len(),
+                        Some(ref scan) => scan.count.saturating_sub(state.main.limit.last_valid),
                         None => 0,
                     };
                     return label(match missing {
@@ -347,10 +347,10 @@ impl App {
         flex_col((
             search,
             self.error_ui(),
-            self.main
-                .results
-                .as_ref()
-                .map(|scan| label(format!("Found {} results", scan.count))),
+            self.main.results.as_ref().map(|scan| {
+                let text = format!("Found {} results ({})", scan.count, scan.query_count);
+                label(text)
+            }),
             sized_box(content).expand_height().flex(1.0),
             flex_row((
                 button("Back", App::go_to_gameselect),
