@@ -211,10 +211,12 @@ impl App {
         let results = self.results();
 
         let formatted = serde_json::to_string_pretty(&results)?;
-        // TODO: tempfile
-        let path = "/tmp/out.json";
-        std::fs::write(path, &formatted)?;
-        opener::open(path)?;
+        let game = &self.selected_game().name;
+        let dir = std::env::temp_dir().join("uniscan").join(game);
+        std::fs::create_dir_all(&dir)?;
+        let path = dir.join("out.json");
+        std::fs::write(&path, &formatted)?;
+        opener::open(&path)?;
 
         Ok(())
     }
