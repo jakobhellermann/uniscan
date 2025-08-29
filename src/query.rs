@@ -6,11 +6,13 @@ use rabex::objects::PPtr;
 use rabex_env::Environment;
 use serde::Deserialize;
 use std::rc::Rc;
+use std::sync::{Arc, RwLock};
 
 use crate::qualify_pptr::{QualifiedPPtr, qualify_pptrs};
 
 fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
-    let env = ENV.get().unwrap();
+    let env = ENV.read().unwrap();
+    let env = env.as_ref().unwrap();
 
     let qualified_pptr = QualifiedPPtr::deserialize(serde_json::Value::from(pptr))?;
 
@@ -62,9 +64,9 @@ pub struct QueryRunner {
 }
 
 impl QueryRunner {
-    pub fn set_env(env: Environment) -> &'static Environment {
-        let mut env = Some(env);
-        ENV.get_or_init(|| env.take().unwrap())
+    pub fn set_env(env: Arc<Environment>) {
+        let env = Some(env);
+        *ENV.write().unwrap() = env;
     }
 
     pub fn set_query(&mut self, query: &str) -> Result<()> {
@@ -153,7 +155,7 @@ impl QueryRunner {
     }
 }
 
-static ENV: std::sync::OnceLock<Environment> = std::sync::OnceLock::new();
+static ENV: RwLock<Option<Arc<Environment>>> = RwLock::new(None);
 
 pub struct DataKind;
 

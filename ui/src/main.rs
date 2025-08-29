@@ -2,11 +2,13 @@ mod utils;
 mod widgets;
 mod workers;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
 use masonry::properties::types::Length;
+use rabex::typetree::NullTypeTreeProvider;
+use rabex_env::Environment;
 use rabex_env::game_files::GameFiles;
 use uniscan::{ScanResults, ScriptFilter, UniScan};
 use winit::error::EventLoopError;
@@ -41,12 +43,17 @@ enum View {
 struct UnityGame {
     name: String,
     path: PathBuf,
+}
+struct SteamGame {
+    game: UnityGame,
     app_id: u32,
 }
 
 struct GameSelect {
-    results: Vec<UnityGame>,
-    game_index: usize,
+    steam_games: Vec<SteamGame>,
+    custom_selection: Option<UnityGame>,
+
+    game_selection: SelectedGame,
 }
 
 struct Main {
@@ -76,8 +83,9 @@ impl Default for App {
             view: View::GameSelect,
 
             gameselect: GameSelect {
-                results: Vec::new(),
-                game_index: 0,
+                steam_games: Vec::new(),
+                custom_selection: None,
+                game_selection: SelectedGame::None,
             },
             main: Main {
                 query_raw: "".into(),
@@ -95,10 +103,16 @@ impl Default for App {
     }
 }
 
+enum SelectedGame {
+    None,
+    Steam(usize),
+    Custom,
+}
+
 // Shared
 impl App {
-    fn go_to_main(&mut self, game_index: usize) {
-        self.gameselect.game_index = game_index;
+    fn go_to_main(&mut self, selection: SelectedGame) {
+        self.gameselect.game_selection = selection;
 
         self.view = View::Main;
         self.clear_error();
@@ -113,6 +127,8 @@ impl App {
     }
     fn go_to_gameselect(&mut self) {
         self.view = View::GameSelect;
+        self.main.results = None;
+        self.gameselect.game_selection = SelectedGame::None;
         self.clear_error();
         *self.uniscan.lock().unwrap() = None;
         // TODO: cancel tasks?
@@ -121,8 +137,8 @@ impl App {
     fn clear_error(&mut self) {
         self.error = Ok(());
     }
-    fn set_error<T>(&mut self, result: Result<T>) {
-        self.error = result.map(drop);
+    fn set_error(&mut self, err: anyhow::Error) {
+        self.error = Err(err);
     }
     fn set_error_with<T>(&mut self, f: impl Fn(&mut App) -> Result<T>) {
         let result = f(self);
@@ -139,7 +155,14 @@ impl App {
 // View: GameSelect
 impl App {
     pub fn selected_game(&self) -> &UnityGame {
-        &self.gameselect.results[self.gameselect.game_index]
+        match self.gameselect.game_selection {
+            SelectedGame::None => unreachable!(),
+            SelectedGame::Steam(i) => &self.gameselect.steam_games[i].game,
+            SelectedGame::Custom => self.gameselect.custom_selection.as_ref().unwrap(),
+        }
+    }
+    pub fn gameselect_open_custom(&mut self) {
+        self.send_command(generic::Request::OpenGame);
     }
 }
 
@@ -220,24 +243,39 @@ impl App {
             portal({
                 let items = self
                     .gameselect
-                    .results
+                    .steam_games
                     .iter()
                     .enumerate()
                     .map(|(i, game)| {
                         flex_row((
                             sized_box(
-                                button("Open", move |state: &mut App| state.go_to_main(i))
-                                    .padding(4.),
+                                button("Open", move |state: &mut App| {
+                                    state.go_to_main(SelectedGame::Steam(i))
+                                })
+                                .padding(4.),
                             ),
                             sized_box(label(game.app_id.to_string())).width(Length::px(60.)),
-                            label(game.name.as_str()),
+                            label(game.game.name.as_str()),
                         ))
                     })
                     .collect::<Vec<_>>();
+                let items_empty = items.is_empty();
                 sized_box(
                     flex_col((
                         items,
-                        //button("Open another", |_| {}).disabled(true).padding(4.),
+                        items_empty.then(|| label("No steam games detected.")),
+                        self.gameselect.custom_selection.as_ref().map(|game| {
+                            flex_row((
+                                sized_box(
+                                    button("Open", move |state: &mut App| {
+                                        state.go_to_main(SelectedGame::Custom)
+                                    })
+                                    .padding(4.),
+                                ),
+                                label(game.name.as_str()),
+                            ))
+                        }),
+                        button("Open another", App::gameselect_open_custom).padding(4.),
                     ))
                     .cross_axis_alignment(CrossAxisAlignment::Start),
                 )
@@ -358,7 +396,22 @@ impl App {
             worker(
                 workers::generic::worker,
                 |state: &mut App, sender| state.sender_generic = Some(sender),
-                App::set_error,
+                |state: &mut App, res: Result<generic::Response>| match res {
+                    Ok(res) => match res {
+                        generic::Response::Noop => {}
+                        generic::Response::OpenAnotherGame(path) => {
+                            let Some(path) = path else {
+                                return;
+                            };
+                            state.set_error_with(|app| {
+                                app.gameselect.custom_selection =
+                                    Some(unity_game_from_path(&path)?);
+                                Ok(())
+                            });
+                        }
+                    },
+                    Err(err) => state.set_error(err),
+                },
             ),
             worker_raw(
                 move |a, b| workers::rescan::worker(uniscan.clone(), a, b),
@@ -369,13 +422,9 @@ impl App {
                             state.clear_error();
                             state.main.results = Some(scan);
                         }
-                        rescan::Response::Error(error) => {
-                            state.error = Err(error);
-                        }
+                        rescan::Response::Error(err) => state.set_error(err),
                     },
-                    Err(e) => {
-                        state.error = Err(e);
-                    }
+                    Err(err) => state.set_error(err),
                 },
             ),
         )
@@ -385,14 +434,14 @@ impl App {
 fn main() -> Result<(), EventLoopError> {
     let mut app = App::default();
 
-    app.set_error_with(|app| Ok(app.gameselect.results = find_games()?));
+    app.set_error_with(|app| Ok(app.gameselect.steam_games = find_games()?));
 
     let app = Xilem::new_simple(app, App::ui, WindowOptions::new("uniscan"));
     app.run_in(EventLoop::with_user_event())?;
     Ok(())
 }
 
-fn find_games() -> Result<Vec<UnityGame>> {
+fn find_games() -> Result<Vec<SteamGame>> {
     let steam_dir = steamlocate::SteamDir::locate()?;
 
     let mut results = Vec::new();
@@ -405,13 +454,26 @@ fn find_games() -> Result<Vec<UnityGame>> {
                 continue;
             };
 
-            results.push(UnityGame {
+            let game = UnityGame {
                 name: app.name.clone().unwrap_or_else(|| app.install_dir.clone()),
                 path,
+            };
+            results.push(SteamGame {
+                game,
                 app_id: app.app_id,
             })
         }
     }
 
     Ok(results)
+}
+
+fn unity_game_from_path(path: &Path) -> Result<UnityGame> {
+    let env = Environment::new_in(path, NullTypeTreeProvider)?;
+    let name = env.app_info()?.name;
+
+    Ok(UnityGame {
+        name,
+        path: env.resolver.game_dir,
+    })
 }

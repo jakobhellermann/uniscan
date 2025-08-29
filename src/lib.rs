@@ -13,11 +13,12 @@ use rabex_env::{EnvResolver, Environment};
 use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
 use std::rc::Rc;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use typetree_generator_api::GeneratorBackend;
 
 pub struct UniScan {
-    pub env: &'static Environment,
+    pub env: Arc<Environment>,
     pub scene_names: Vec<String>,
     pub query: QueryRunner,
 }
@@ -60,7 +61,8 @@ impl UniScan {
         let tpk = TypeTreeCache::new(TpkTypeTreeBlob::embedded());
         let mut env = Environment::new(game_files, tpk);
         env.load_typetree_generator(GeneratorBackend::default())?;
-        let env = QueryRunner::set_env(env);
+        let env = Arc::new(env);
+        QueryRunner::set_env(Arc::clone(&env));
 
         let build_settings = env.build_settings()?;
         let scene_names = build_settings
@@ -137,7 +139,7 @@ impl UniScan {
             .env
             .load_leaf(path)
             .with_context(|| format!("Could not load '{path}'"))?;
-        let file = SerializedFileHandle::new(self.env, &file, data.as_ref());
+        let file = SerializedFileHandle::new(&self.env, &file, data.as_ref());
 
         for mb in file.objects_of::<MonoBehaviour>()? {
             let Some(script) = mb.mono_script()? else {
