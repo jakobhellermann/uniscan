@@ -1,0 +1,46 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+    <Package
+        Name="Uniscan"
+        Manufacturer="JJ"
+        Version="0.1.0.0"
+        UpgradeCode="23d72928-990f-47fe-9d6a-57e5addeb3c9"
+    >
+        <MediaTemplate EmbedCab="true" />
+
+        <Icon Id="icon.ico" SourceFile="../../32x32.ico" />
+
+        <MajorUpgrade DowngradeErrorMessage="!(loc.DowngradeError)" />
+
+        <Feature Id="Main">
+            <ComponentGroupRef Id="Uniscan" />
+        </Feature>
+
+        <StandardDirectory Id="ProgramFiles6432Folder">
+            <Directory Id="INSTALLFOLDER" Name="!(bind.Property.ProductName)" />
+        </StandardDirectory>
+
+        <ComponentGroup Id="Uniscan" Directory="INSTALLFOLDER">
+            <Component>
+                <File
+                    Source="../../../target/release/uniscan-ui.exe"
+                    KeyPath="true"
+                >
+                    <Shortcut
+                        Id="Shortcut"
+                        Directory="StartMenuFolder"
+                        Name="Uniscan"
+                        Advertise="true"
+                        Icon="icon.ico"
+                    >
+                    </Shortcut>
+                </File>
+            </Component>
+            <Component>
+                <File
+                    Source="../../../target/release/TypeTreeGeneratorAPI.dll"
+                />
+            </Component>
+        </ComponentGroup>
+
+    </Package>
+</Wix>

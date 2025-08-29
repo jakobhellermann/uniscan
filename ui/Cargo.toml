@@ -33,3 +33,18 @@ icons = ["32x32.png"]
 
 [package.metadata.packager.appimage]
 files = { "libTypeTreeGeneratorAPI.so" = "usr/bin/libTypeTreeGeneratorAPI.so" }
+
+[package.metadata.packager.wix]
+fragments = [
+    """
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
+<Fragment>
+    <CustomAction Id="OpenNotepad" Directory="INSTALLDIR" Execute="immediate" ExeCommand="cmd.exe /c notepad.exe" Return="check" />
+    <InstallExecuteSequence>
+        <Custom Action="OpenNotepad" After="InstallInitialize" />
+    </InstallExecuteSequence>
+</Fragment>
+</Wix>
+""",
+]
