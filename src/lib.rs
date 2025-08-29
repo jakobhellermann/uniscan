@@ -42,7 +42,8 @@ impl ScriptFilter {
         if self.filter.is_empty() {
             return true;
         }
-        let class = script.m_ClassName.to_ascii_lowercase();
+        let mut class = script.full_name();
+        class.to_mut().make_ascii_lowercase();
 
         class.contains(&self.filter)
     }
