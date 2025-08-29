@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 mod utils;
 mod widgets;
 mod workers;
