@@ -16,8 +16,8 @@ fn main() -> Result<()> {
     let script_filter = ScriptFilter::new(&script_filter);
     let uniscan = UniScan::new(Path::new(&game_dir), filter.as_deref().unwrap_or("."))?;
 
-    let (all, _) = uniscan.scan_all(&script_filter, usize::MAX)?;
-    print_all(&all);
+    let scan = uniscan.scan_all(&script_filter, usize::MAX)?;
+    print_all(&scan.items);
 
     Ok(())
 }

@@ -2,17 +2,21 @@ mod utils;
 mod widgets;
 mod workers;
 
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+
 use anyhow::Result;
 use masonry::properties::types::Length;
-use uniscan::ScriptFilter;
+use rabex_env::game_files::GameFiles;
+use uniscan::{ScanResults, ScriptFilter, UniScan};
 use winit::error::EventLoopError;
 use xilem::core::one_of::OneOf2;
 use xilem::core::{NoElement, ViewSequence, fork};
 use xilem::style::{Background, Padding, Style};
 use xilem::tokio::sync::mpsc::UnboundedSender;
 use xilem::view::{
-    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, prose,
-    sized_box, text_input, virtual_scroll, worker,
+    CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, portal,
+    prose, sized_box, text_input, virtual_scroll, worker, worker_raw,
 };
 use xilem::{Color, EventLoop, ViewCtx, WidgetView, WindowOptions, Xilem};
 
@@ -34,13 +38,23 @@ enum View {
     Main,
 }
 
-struct GameSelect {}
+struct UnityGame {
+    name: String,
+    path: PathBuf,
+    app_id: u32,
+}
+
+struct GameSelect {
+    results: Vec<UnityGame>,
+    game_index: usize,
+}
+
 struct Main {
     query_raw: String,
     script_filter_raw: String,
     script_filter: ScriptFilter,
     limit: NumberInputState<usize>,
-    results: Option<(Vec<serde_json::Value>, usize)>,
+    results: Option<ScanResults>,
 }
 
 struct App {
@@ -53,6 +67,7 @@ struct App {
     error: Result<()>,
     sender_rescan: Option<UnboundedSender<rescan::Request>>,
     sender_generic: Option<UnboundedSender<generic::Request>>,
+    uniscan: Arc<Mutex<Option<UniScan>>>,
 }
 
 impl Default for App {
@@ -60,7 +75,10 @@ impl Default for App {
         Self {
             view: View::GameSelect,
 
-            gameselect: GameSelect {},
+            gameselect: GameSelect {
+                results: Vec::new(),
+                game_index: 0,
+            },
             main: Main {
                 query_raw: "".into(),
                 script_filter: ScriptFilter::new("GeoRock"),
@@ -72,16 +90,36 @@ impl Default for App {
             error: Result::Ok(()),
             sender_rescan: None,
             sender_generic: None,
+            uniscan: Default::default(),
         }
     }
 }
 
 // Shared
 impl App {
-    fn go_to_main(&mut self) {
+    fn go_to_main(&mut self, game_index: usize) {
+        self.gameselect.game_index = game_index;
+
         self.view = View::Main;
+        self.clear_error();
+        self.set_error_with(|app| {
+            utils::time("game init", || {
+                let uniscan = UniScan::new(&app.selected_game().path, ".")?;
+                *app.uniscan.lock().unwrap() = Some(uniscan);
+                app.reload();
+                Ok(())
+            })
+        });
+    }
+
+    fn clear_error(&mut self) {
+        self.error = Ok(());
     }
     fn set_error<T>(&mut self, result: Result<T>) {
+        self.error = result.map(drop);
+    }
+    fn set_error_with<T>(&mut self, f: impl Fn(&mut App) -> Result<T>) {
+        let result = f(self);
         self.error = result.map(drop);
     }
     fn send_rescan_command(&self, cmd: rescan::Request) {
@@ -93,7 +131,11 @@ impl App {
 }
 
 // View: GameSelect
-impl App {}
+impl App {
+    pub fn selected_game(&self) -> &UnityGame {
+        &self.gameselect.results[self.gameselect.game_index]
+    }
+}
 
 // View: Main
 impl App {
@@ -115,7 +157,7 @@ impl App {
             other => other.to_owned(),
         };
 
-        self.send_rescan_command(rescan::Request {
+        self.send_rescan_command(rescan::Request::Scan {
             query,
             script: self.main.script_filter.clone(),
             limit: self.main.limit.last_valid,
@@ -124,7 +166,7 @@ impl App {
 
     fn results(&self) -> &[serde_json::Value] {
         match self.main.results {
-            Some((ref values, _)) => values.as_slice(),
+            Some(ref scan) => scan.items.as_slice(),
             None => &[],
         }
     }
@@ -157,14 +199,47 @@ impl App {
             View::GameSelect => OneOf2::A(self.ui_gameselect()),
             View::Main => OneOf2::B(self.ui_main()),
         };
-        let content = sized_box(content)
+        let content = flex_col(content)
             .padding(8.)
             .background_color(BACKGROUND_COLOR);
-        fork(content, App::workers())
+        fork(content, App::workers(Arc::clone(&self.uniscan)))
     }
 
     fn ui_gameselect(&mut self) -> impl WidgetView<App> + use<> {
-        button("next", App::go_to_main)
+        let header = label("Select a unity game").text_size(26.);
+
+        flex_col((
+            flex_row(header),
+            self.error_ui(),
+            portal({
+                let items = self
+                    .gameselect
+                    .results
+                    .iter()
+                    .enumerate()
+                    .map(|(i, game)| {
+                        flex_row((
+                            sized_box(
+                                button("Open", move |state: &mut App| state.go_to_main(i))
+                                    .padding(4.),
+                            ),
+                            sized_box(label(game.app_id.to_string())).width(Length::px(60.)),
+                            label(game.name.as_str()),
+                        ))
+                    })
+                    .collect::<Vec<_>>();
+                sized_box(
+                    flex_col((
+                        items,
+                        //button("Open another", |_| {}).disabled(true).padding(4.),
+                    ))
+                    .cross_axis_alignment(CrossAxisAlignment::Start),
+                )
+                .expand()
+            })
+            .flex(1.),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Fill)
     }
 
     fn ui_main(&mut self) -> impl WidgetView<App> + use<> {
@@ -186,7 +261,7 @@ impl App {
 
                 if index == results.len() {
                     let missing = match state.main.results {
-                        Some((ref data, count)) => count - data.len(),
+                        Some(ref scan) => scan.count - scan.items.len(),
                         None => 0,
                     };
                     return label(match missing {
@@ -212,19 +287,19 @@ impl App {
             },
         );
 
-        let can_export = self.main.results.as_ref().is_some_and(|x| x.1 != 0);
+        let can_export = self
+            .main
+            .results
+            .as_ref()
+            .is_some_and(|scan| scan.count != 0);
 
         flex_col((
             search,
-            self.error
-                .as_ref()
-                .err()
-                .map(|e| label(format!("{:?}", e)).color(COLOR_ERROR).boxed())
-                .unwrap_or_else(|| label("").boxed()),
+            self.error_ui(),
             self.main
                 .results
                 .as_ref()
-                .map(|(_, count)| label(format!("Found {} results", count))),
+                .map(|scan| label(format!("Found {} results", scan.count))),
             sized_box(content).expand_height().flex(1.0),
             flex_row((
                 label("Limit:"),
@@ -253,24 +328,42 @@ impl App {
         .cross_axis_alignment(CrossAxisAlignment::Fill)
     }
 
-    fn workers() -> impl ViewSequence<App, (), ViewCtx, NoElement> {
+    fn error_ui(&mut self) -> impl WidgetView<App> + use<> {
+        self.error
+            .as_ref()
+            .err()
+            .map(|e| {
+                prose(format!("{:?}", e))
+                    .line_break_mode(masonry::properties::LineBreaking::WordWrap)
+                    .text_color(COLOR_ERROR)
+                    .boxed()
+            })
+            .unwrap_or_else(|| label("").boxed())
+    }
+
+    fn workers(
+        uniscan: Arc<Mutex<Option<UniScan>>>,
+    ) -> impl ViewSequence<App, (), ViewCtx, NoElement> {
+        // let x = Arc::clone(&self.uniscan);
         (
             worker(
                 workers::generic::worker,
                 |state: &mut App, sender| state.sender_generic = Some(sender),
                 App::set_error,
             ),
-            worker(
-                workers::rescan::worker,
-                |state: &mut App, sender| {
-                    state.sender_rescan = Some(sender);
-                    state.reload();
-                },
+            worker_raw(
+                move |a, b| workers::rescan::worker(uniscan.clone(), a, b),
+                |state: &mut App, sender| state.sender_rescan = Some(sender),
                 |state, res: Result<rescan::Response>| match res {
-                    Ok(res) => {
-                        state.error = Ok(());
-                        state.main.results = Some(res);
-                    }
+                    Ok(res) => match res {
+                        rescan::Response::ScanFinished(scan) => {
+                            state.clear_error();
+                            state.main.results = Some(scan);
+                        }
+                        rescan::Response::Error(error) => {
+                            state.error = Err(error);
+                        }
+                    },
                     Err(e) => {
                         state.error = Err(e);
                     }
@@ -281,9 +374,35 @@ impl App {
 }
 
 fn main() -> Result<(), EventLoopError> {
-    let app = App::default();
+    let mut app = App::default();
+
+    app.set_error_with(|app| Ok(app.gameselect.results = find_games()?));
 
     let app = Xilem::new_simple(app, App::ui, WindowOptions::new("uniscan"));
     app.run_in(EventLoop::with_user_event())?;
     Ok(())
+}
+
+fn find_games() -> Result<Vec<UnityGame>> {
+    let steam_dir = steamlocate::SteamDir::locate()?;
+
+    let mut results = Vec::new();
+    for lib in steam_dir.libraries()? {
+        let lib = lib?;
+        for app in lib.apps() {
+            let app = app?;
+
+            let Ok(path) = GameFiles::probe_dir(&lib.resolve_app_dir(&app)) else {
+                continue;
+            };
+
+            results.push(UnityGame {
+                name: app.name.clone().unwrap_or_else(|| app.install_dir.clone()),
+                path,
+                app_id: app.app_id,
+            })
+        }
+    }
+
+    Ok(results)
 }

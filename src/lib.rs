@@ -3,7 +3,7 @@ pub mod query;
 
 use query::QueryRunner;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Ok, Result};
 use rabex::tpk::TpkTypeTreeBlob;
 use rabex::typetree::typetree_cache::sync::TypeTreeCache;
 use rabex_env::game_files::GameFiles;
@@ -50,6 +50,12 @@ impl ScriptFilter {
     }
 }
 
+#[derive(Debug)]
+pub struct ScanResults {
+    pub items: Vec<serde_json::Value>,
+    pub count: usize,
+}
+
 impl UniScan {
     pub fn new(game_dir: &Path, query: &str) -> Result<Self> {
         let game_files = GameFiles::probe(game_dir)?;
@@ -74,11 +80,7 @@ impl UniScan {
         })
     }
 
-    pub fn scan_all(
-        &self,
-        script_filter: &ScriptFilter,
-        limit: usize,
-    ) -> Result<(Vec<serde_json::Value>, usize)> {
+    pub fn scan_all(&self, script_filter: &ScriptFilter, limit: usize) -> Result<ScanResults> {
         let count = AtomicUsize::new(0);
 
         let items = self
@@ -121,7 +123,10 @@ impl UniScan {
                 Ok(a)
             })?;
 
-        Ok((items, count.into_inner()))
+        Ok(ScanResults {
+            items,
+            count: count.into_inner(),
+        })
     }
 
     fn scan_file(
