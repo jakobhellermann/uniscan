@@ -89,8 +89,8 @@ impl Default for App {
             },
             main: Main {
                 query_raw: "".into(),
-                script_filter: ScriptFilter::new("GeoRock"),
-                script_filter_raw: "GeoRock".into(),
+                script_filter: ScriptFilter::new(""),
+                script_filter_raw: String::new(),
                 limit: NumberInputState::new(500),
                 results: None,
             },
@@ -119,17 +119,23 @@ impl App {
         self.set_error_with(|app| {
             utils::time("game init", || {
                 let uniscan = UniScan::new(&app.selected_game().path, ".")?;
+                let env = Arc::clone(&uniscan.env);
                 *app.uniscan.lock().unwrap() = Some(uniscan);
-                app.reload();
+                app.send_command(generic::Request::GetStats(env));
                 Ok(())
             })
         });
     }
     fn go_to_gameselect(&mut self) {
         self.view = View::GameSelect;
+
         self.main.results = None;
-        self.gameselect.game_selection = SelectedGame::None;
+        self.set_script_filter(String::new());
+        self.set_query(String::new());
         self.clear_error();
+
+        self.gameselect.game_selection = SelectedGame::None;
+
         *self.uniscan.lock().unwrap() = None;
         // TODO: cancel tasks?
     }
@@ -408,6 +414,11 @@ impl App {
                                     Some(unity_game_from_path(&path)?);
                                 Ok(())
                             });
+                        }
+                        generic::Response::Stats(stats) => {
+                            if state.main.script_filter_raw.is_empty() {
+                                state.set_script_filter(stats.most_used_script);
+                            }
                         }
                     },
                     Err(err) => state.set_error(err),
