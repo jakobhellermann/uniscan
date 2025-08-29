@@ -6,14 +6,15 @@ use anyhow::Result;
 use masonry::properties::types::Length;
 use uniscan::ScriptFilter;
 use winit::error::EventLoopError;
-use xilem::core::fork;
+use xilem::core::one_of::OneOf2;
+use xilem::core::{NoElement, ViewSequence, fork};
 use xilem::style::{Background, Padding, Style};
 use xilem::tokio::sync::mpsc::UnboundedSender;
 use xilem::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, prose,
     sized_box, text_input, virtual_scroll, worker,
 };
-use xilem::{Color, EventLoop, WidgetView, WindowOptions, Xilem};
+use xilem::{Color, EventLoop, ViewCtx, WidgetView, WindowOptions, Xilem};
 
 use widgets::{NumberInputState, margin, number_input};
 
@@ -28,15 +29,28 @@ pub const BUTTON_DISABLED_COLOR: Color = Color::from_rgb8(55, 55, 60);
 #[global_allocator]
 static GLOBAL: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-struct App {
+enum View {
+    GameSelect,
+    Main,
+}
+
+struct GameSelect {}
+struct Main {
     query_raw: String,
     script_filter_raw: String,
     script_filter: ScriptFilter,
     limit: NumberInputState<usize>,
-
     results: Option<(Vec<serde_json::Value>, usize)>,
-    error: Result<()>,
+}
 
+struct App {
+    view: View,
+
+    gameselect: GameSelect,
+    main: Main,
+
+    // Shared
+    error: Result<()>,
     sender_rescan: Option<UnboundedSender<rescan::Request>>,
     sender_generic: Option<UnboundedSender<generic::Request>>,
 }
@@ -44,54 +58,78 @@ struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            query_raw: "".into(),
-            script_filter: ScriptFilter::new("GeoRock"),
-            script_filter_raw: "GeoRock".into(),
-            limit: NumberInputState::new(500),
-            results: None,
-            error: Result::Ok(()),
+            view: View::GameSelect,
 
+            gameselect: GameSelect {},
+            main: Main {
+                query_raw: "".into(),
+                script_filter: ScriptFilter::new("GeoRock"),
+                script_filter_raw: "GeoRock".into(),
+                limit: NumberInputState::new(500),
+                results: None,
+            },
+
+            error: Result::Ok(()),
             sender_rescan: None,
             sender_generic: None,
         }
     }
 }
 
+// Shared
+impl App {
+    fn go_to_main(&mut self) {
+        self.view = View::Main;
+    }
+    fn set_error<T>(&mut self, result: Result<T>) {
+        self.error = result.map(drop);
+    }
+    fn send_rescan_command(&self, cmd: rescan::Request) {
+        let _ = self.sender_rescan.as_ref().unwrap().send(cmd);
+    }
+    fn send_command(&self, cmd: generic::Request) {
+        let _ = self.sender_generic.as_ref().unwrap().send(cmd);
+    }
+}
+
+// View: GameSelect
+impl App {}
+
+// View: Main
 impl App {
     fn set_query(&mut self, query: String) {
-        self.query_raw = query;
+        self.main.query_raw = query;
         self.reload();
     }
     fn set_script_filter(&mut self, script_filter: String) {
-        self.script_filter_raw = script_filter;
-        let new_filter = ScriptFilter::new(&self.script_filter_raw);
-        if new_filter != self.script_filter {
-            self.script_filter = new_filter;
+        self.main.script_filter_raw = script_filter;
+        let new_filter = ScriptFilter::new(&self.main.script_filter_raw);
+        if new_filter != self.main.script_filter {
+            self.main.script_filter = new_filter;
             self.reload();
         }
     }
-
     fn reload(&self) {
-        let query = match self.query_raw.as_str() {
+        let query = match self.main.query_raw.as_str() {
             "" => ".".into(),
             other => other.to_owned(),
         };
 
         self.send_rescan_command(rescan::Request {
             query,
-            script: self.script_filter.clone(),
-            limit: self.limit.last_valid,
+            script: self.main.script_filter.clone(),
+            limit: self.main.limit.last_valid,
         });
     }
 
     fn results(&self) -> &[serde_json::Value] {
-        match self.results {
+        match self.main.results {
             Some((ref values, _)) => values.as_slice(),
             None => &[],
         }
     }
 
-    pub fn export(&mut self) -> Result<()> {
+    fn export(&mut self) -> Result<()> {
         let results = self.results();
 
         let formatted = serde_json::to_string_pretty(&results)?;
@@ -103,28 +141,39 @@ impl App {
         Ok(())
     }
 
-    fn send_rescan_command(&self, cmd: rescan::Request) {
-        let _ = self.sender_rescan.as_ref().unwrap().send(cmd);
-    }
-    fn send_command(&self, cmd: generic::Request) {
-        let _ = self.sender_generic.as_ref().unwrap().send(cmd);
-    }
-
-    pub fn save(&mut self) -> Result<()> {
+    fn save(&mut self) -> Result<()> {
         let results = self.results();
         let formatted = serde_json::to_string_pretty(&results)?;
         self.send_command(generic::Request::Save(formatted));
 
         Ok(())
     }
+}
 
+// UI
+impl App {
     fn ui(&mut self) -> impl WidgetView<App> + use<> {
+        let content = match self.view {
+            View::GameSelect => OneOf2::A(self.ui_gameselect()),
+            View::Main => OneOf2::B(self.ui_main()),
+        };
+        let content = sized_box(content)
+            .padding(8.)
+            .background_color(BACKGROUND_COLOR);
+        fork(content, App::workers())
+    }
+
+    fn ui_gameselect(&mut self) -> impl WidgetView<App> + use<> {
+        button("next", App::go_to_main)
+    }
+
+    fn ui_main(&mut self) -> impl WidgetView<App> + use<> {
         let search = flex_row((
-            text_input(self.query_raw.clone(), App::set_query)
+            text_input(self.main.query_raw.clone(), App::set_query)
                 .placeholder(".m_GameObject | deref | .m_Name")
                 .flex(1.),
             sized_box(text_input(
-                self.script_filter_raw.clone(),
+                self.main.script_filter_raw.clone(),
                 App::set_script_filter,
             ))
             .width(Length::px(180.)),
@@ -136,7 +185,7 @@ impl App {
                 let results = state.results();
 
                 if index == results.len() {
-                    let missing = match state.results {
+                    let missing = match state.main.results {
                         Some((ref data, count)) => count - data.len(),
                         None => 0,
                     };
@@ -163,75 +212,71 @@ impl App {
             },
         );
 
-        let can_export = self.results.as_ref().is_some_and(|x| x.1 != 0);
+        let can_export = self.main.results.as_ref().is_some_and(|x| x.1 != 0);
 
-        fork(
-            flex_col((
-                search,
-                self.error
-                    .as_ref()
-                    .err()
-                    .map(|e| label(format!("{:?}", e)).color(COLOR_ERROR).boxed())
-                    .unwrap_or_else(|| label("").boxed()),
-                self.results
-                    .as_ref()
-                    .map(|(_, count)| label(format!("Found {} results", count))),
-                sized_box(content).expand_height().flex(1.0),
-                flex_row((
-                    label("Limit:"),
-                    sized_box(number_input(
-                        self.limit.clone(),
-                        |state: &mut App, limit| {
-                            let changed = limit.last_valid != state.limit.last_valid;
-                            state.limit = limit;
-                            if changed {
-                                state.reload();
-                            }
-                        },
-                    ))
-                    .width(Length::px(60.)),
-                    button("Open as JSON", |app: &mut App| app.error = app.export())
-                        .disabled(!can_export)
-                        .background_color(BUTTON_COLOR)
-                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
-                    button("Save to file", |app: &mut App| app.error = app.save())
-                        .disabled(!can_export)
-                        .background_color(BUTTON_COLOR)
-                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
+        flex_col((
+            search,
+            self.error
+                .as_ref()
+                .err()
+                .map(|e| label(format!("{:?}", e)).color(COLOR_ERROR).boxed())
+                .unwrap_or_else(|| label("").boxed()),
+            self.main
+                .results
+                .as_ref()
+                .map(|(_, count)| label(format!("Found {} results", count))),
+            sized_box(content).expand_height().flex(1.0),
+            flex_row((
+                label("Limit:"),
+                sized_box(number_input(
+                    self.main.limit.clone(),
+                    |state: &mut App, limit| {
+                        let changed = limit.last_valid != state.main.limit.last_valid;
+                        state.main.limit = limit;
+                        if changed {
+                            state.reload();
+                        }
+                    },
                 ))
-                .main_axis_alignment(MainAxisAlignment::End),
+                .width(Length::px(60.)),
+                button("Open as JSON", |app: &mut App| app.error = app.export())
+                    .disabled(!can_export)
+                    .background_color(BUTTON_COLOR)
+                    .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
+                button("Save to file", |app: &mut App| app.error = app.save())
+                    .disabled(!can_export)
+                    .background_color(BUTTON_COLOR)
+                    .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
             ))
-            .cross_axis_alignment(CrossAxisAlignment::Fill)
-            .padding(8.)
-            .background_color(BACKGROUND_COLOR),
-            (
-                worker(
-                    workers::generic::worker,
-                    |state: &mut App, sender| state.sender_generic = Some(sender),
-                    App::set_error,
-                ),
-                worker(
-                    workers::rescan::worker,
-                    |state: &mut App, sender| {
-                        state.sender_rescan = Some(sender);
-                        state.reload();
-                    },
-                    |state, res: Result<rescan::Response>| match res {
-                        Ok(res) => {
-                            state.error = Ok(());
-                            state.results = Some(res);
-                        }
-                        Err(e) => {
-                            state.error = Err(e);
-                        }
-                    },
-                ),
-            ),
-        )
+            .main_axis_alignment(MainAxisAlignment::End),
+        ))
+        .cross_axis_alignment(CrossAxisAlignment::Fill)
     }
 
-    fn set_error<T>(&mut self, result: Result<T>) {
-        self.error = result.map(drop);
+    fn workers() -> impl ViewSequence<App, (), ViewCtx, NoElement> {
+        (
+            worker(
+                workers::generic::worker,
+                |state: &mut App, sender| state.sender_generic = Some(sender),
+                App::set_error,
+            ),
+            worker(
+                workers::rescan::worker,
+                |state: &mut App, sender| {
+                    state.sender_rescan = Some(sender);
+                    state.reload();
+                },
+                |state, res: Result<rescan::Response>| match res {
+                    Ok(res) => {
+                        state.error = Ok(());
+                        state.main.results = Some(res);
+                    }
+                    Err(e) => {
+                        state.error = Err(e);
+                    }
+                },
+            ),
+        )
     }
 }
 
