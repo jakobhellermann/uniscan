@@ -1,5 +1,7 @@
 # Uniscan
 
+[![GitHub Release](https://img.shields.io/github/v/release/jakobhellermann/uniscan)](https://github.com/jakobhellermann/uniscan/releases)
+
 Interactively explore and export the contents of `MonoBehaviour`s of Unity games:
 
 ![game select window](./docs/select.png)
@@ -15,7 +17,7 @@ There are two filter inputs at the top of the screen.
 jq is a tool for working with `JSON`, and generally works by chaining together various filters:
 ```jq
 # access a field on the objects
-._scene 
+._scene
 
 # you can create new arrays and objects
 [ .monsterStat.level, (.name | ascii_upcase) ]
