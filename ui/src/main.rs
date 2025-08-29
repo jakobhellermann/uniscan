@@ -111,6 +111,12 @@ impl App {
             })
         });
     }
+    fn go_to_gameselect(&mut self) {
+        self.view = View::GameSelect;
+        self.clear_error();
+        *self.uniscan.lock().unwrap() = None;
+        // TODO: cancel tasks?
+    }
 
     fn clear_error(&mut self) {
         self.error = Ok(());
@@ -302,28 +308,31 @@ impl App {
                 .map(|scan| label(format!("Found {} results", scan.count))),
             sized_box(content).expand_height().flex(1.0),
             flex_row((
-                label("Limit:"),
-                sized_box(number_input(
-                    self.main.limit.clone(),
-                    |state: &mut App, limit| {
-                        let changed = limit.last_valid != state.main.limit.last_valid;
-                        state.main.limit = limit;
-                        if changed {
-                            state.reload();
-                        }
-                    },
-                ))
-                .width(Length::px(60.)),
-                button("Open as JSON", |app: &mut App| app.error = app.export())
-                    .disabled(!can_export)
-                    .background_color(BUTTON_COLOR)
-                    .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
-                button("Save to file", |app: &mut App| app.error = app.save())
-                    .disabled(!can_export)
-                    .background_color(BUTTON_COLOR)
-                    .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
+                button("Back", App::go_to_gameselect),
+                flex_row((
+                    label("Limit:"),
+                    sized_box(number_input(
+                        self.main.limit.clone(),
+                        |state: &mut App, limit| {
+                            let changed = limit.last_valid != state.main.limit.last_valid;
+                            state.main.limit = limit;
+                            if changed {
+                                state.reload();
+                            }
+                        },
+                    ))
+                    .width(Length::px(60.)),
+                    button("Open as JSON", |app: &mut App| app.error = app.export())
+                        .disabled(!can_export)
+                        .background_color(BUTTON_COLOR)
+                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
+                    button("Save to file", |app: &mut App| app.error = app.save())
+                        .disabled(!can_export)
+                        .background_color(BUTTON_COLOR)
+                        .disabled_background(Background::Color(BUTTON_DISABLED_COLOR)),
+                )),
             ))
-            .main_axis_alignment(MainAxisAlignment::End),
+            .main_axis_alignment(MainAxisAlignment::SpaceBetween),
         ))
         .cross_axis_alignment(CrossAxisAlignment::Fill)
     }
