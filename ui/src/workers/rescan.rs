@@ -45,7 +45,9 @@ pub async fn worker(
                 let uniscan = Arc::clone(&uniscan);
                 let res = tokio::task::spawn_blocking(move || {
                     let mut uniscan = uniscan.lock().unwrap_or_else(PoisonError::into_inner);
-                    let uniscan = uniscan.as_mut().unwrap();
+                    let Some(uniscan) = uniscan.as_mut() else {
+                        return Ok(ScanResults::default());
+                    };
                     uniscan.query.set_query(&query)?;
                     utils::time("rescan", || uniscan.scan_all(&script, limit))
                 })

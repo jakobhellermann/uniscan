@@ -49,7 +49,7 @@ impl ScriptFilter {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct ScanResults {
     pub items: Vec<serde_json::Value>,
     pub count: usize,
