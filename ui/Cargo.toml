@@ -39,3 +39,9 @@ icons = ["32x32.png"]
 
 [package.metadata.packager.appimage]
 files = { "libTypeTreeGeneratorAPI.so" = "usr/bin/libTypeTreeGeneratorAPI.so" }
+
+[package.metadata.packager.deb]
+files = { "libTypeTreeGeneratorAPI.so" = "usr/bin/libTypeTreeGeneratorAPI.so" } # todo: move this to proper location
+
+[package.metadata.packager.pacman]
+files = { "libTypeTreeGeneratorAPI.so" = "usr/bin/libTypeTreeGeneratorAPI.so" } # todo: move this to proper location
