@@ -5,7 +5,7 @@ use xilem::WidgetView;
 use xilem::style::{Padding, Style};
 use xilem::view::{TextInput, sized_box, text_input};
 
-pub fn margin<State: 'static, Action: 'static, V: 'static>(
+pub fn margin<State: 'static, Action: 'static, V>(
     inner: V,
     margin: Padding,
 ) -> impl WidgetView<State, Action> + use<State, Action, V>

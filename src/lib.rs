@@ -90,10 +90,7 @@ impl UniScan {
 
                 if count.load(Ordering::Relaxed) > limit {
                     let mut i = 0;
-                    self.scan_file(path_str, script_filter, |_, _, _| {
-                        i += 1;
-                        Ok(())
-                    })?;
+                    self.scan_file(path_str, script_filter, |_, _, _| Ok(i += 1))?;
                     count.fetch_add(i, Ordering::Relaxed);
                     return Ok(a);
                 }

@@ -22,3 +22,6 @@ rfd = { version = "0.15.4", default-features = false, features = [
     "tokio",
 ] }
 steamlocate = "2.0.1"
+
+[lints]
+workspace = true

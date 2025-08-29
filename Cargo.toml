@@ -25,6 +25,9 @@ jaq-std = { version = "2.1", default-features = true, features = [
     "math",
 ] }
 
+[lints]
+workspace = true
+
 [workspace]
 members = [".", "ui"]
 default-members = ["ui"]
@@ -36,6 +39,9 @@ rabex = { git = "https://github.com/jakobhellermann/RustyAssetBundleEXtractor", 
     # "serde_path_to_error", nicer errors for debugging, at a 2x speed cost
 ] }
 rabex-env = { path = "../rabex-env" }
+
+[workspace.lints.clippy]
+unit_arg = "allow"
 
 [profile.dev.package."*"]
 opt-level = 2
