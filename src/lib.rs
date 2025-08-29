@@ -39,14 +39,11 @@ impl ScriptFilter {
 
     pub fn matches(&self, script: &MonoScript) -> bool {
         if self.filter.is_empty() {
-            return false;
+            return true;
         }
         let class = script.m_ClassName.to_ascii_lowercase();
 
-        match self.filter.len() {
-            0..3 => class == self.filter,
-            _ => class.contains(&self.filter),
-        }
+        class.contains(&self.filter)
     }
 }
 
