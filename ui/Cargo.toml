@@ -1,7 +1,13 @@
 [package]
 name = "uniscan-ui"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Interactively explore and export the contents of MonoBehaviours of Unity games"
+
+[[bin]]
+name = "uniscan"
+path = "src/main.rs"
 
 [dependencies]
 masonry = { git = "https://github.com/jakobhellermann/xilem", branch = "accesskit-tokio" }
@@ -10,18 +16,18 @@ xilem = { git = "https://github.com/jakobhellermann/xilem", branch = "accesskit-
 
 rabex-env.workspace = true
 rabex.workspace = true
-uniscan = { version = "0.1", path = ".." }
+uniscan = { path = ".." }
 winit = "0.30"
 serde_json = "1.0"
 anyhow = "1.0"
 tracing = "0.1"
 mimalloc = "0.1"
-opener = "0.8.2"
-rfd = { version = "0.15.4", default-features = false, features = [
+opener = "0.8"
+rfd = { version = "0.15", default-features = false, features = [
     "xdg-portal",
     "tokio",
 ] }
-steamlocate = "2.0.1"
+steamlocate = "2.0"
 
 [lints]
 workspace = true
@@ -33,18 +39,3 @@ icons = ["32x32.png"]
 
 [package.metadata.packager.appimage]
 files = { "libTypeTreeGeneratorAPI.so" = "usr/bin/libTypeTreeGeneratorAPI.so" }
-
-[package.metadata.packager.wix]
-fragments = [
-    """
-<?xml version="1.0" encoding="utf-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-<Fragment>
-    <CustomAction Id="OpenNotepad" Directory="INSTALLDIR" Execute="immediate" ExeCommand="cmd.exe /c notepad.exe" Return="check" />
-    <InstallExecuteSequence>
-        <Custom Action="OpenNotepad" After="InstallInitialize" />
-    </InstallExecuteSequence>
-</Fragment>
-</Wix>
-""",
-]

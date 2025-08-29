@@ -1,7 +1,8 @@
 [package]
 name = "uniscan"
-version = "0.1.0"
-edition = "2024"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
 mimalloc = "0.1"
@@ -29,11 +30,14 @@ jaq-std = { version = "2.1", default-features = true, features = [
 workspace = true
 
 [workspace]
+package.version = "1.0.0"
+package.edition = "2024"
+package.license = "MIT"
 members = [".", "ui"]
 default-members = ["ui"]
 
 [workspace.dependencies]
-typetree-generator-api = { path = "../unity-scene-repacker/typetree-generator-api" }
+typetree-generator-api = { git = "https://github.com/jakobhellermann/unity-scene-repacker", rev = "4e9e56" }
 rabex = { git = "https://github.com/jakobhellermann/RustyAssetBundleEXtractor", branch = "all", default-features = false, features = [
     "embed-tpk",
     # "serde_path_to_error", nicer errors for debugging, at a 2x speed cost
@@ -42,6 +46,10 @@ rabex-env = { path = "../rabex-env" }
 
 [workspace.lints.clippy]
 unit_arg = "allow"
+
+[profile.release]
+strip = "symbols"
+lto = "thin"
 
 [profile.dev.package."*"]
 opt-level = 2
