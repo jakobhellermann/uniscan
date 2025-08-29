@@ -9,8 +9,8 @@ use rabex::typetree::typetree_cache::sync::TypeTreeCache;
 use rabex_env::game_files::GameFiles;
 use rabex_env::handle::{ObjectRefHandle, SerializedFileHandle};
 use rabex_env::unity::types::{MonoBehaviour, MonoScript};
+use rabex_env::utils::par_fold_reduce;
 use rabex_env::{EnvResolver, Environment};
-use rayon::iter::{IntoParallelRefIterator, ParallelIterator};
 use std::path::Path;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -83,19 +83,15 @@ impl UniScan {
     pub fn scan_all(&self, script_filter: &ScriptFilter, limit: usize) -> Result<ScanResults> {
         let count = AtomicUsize::new(0);
 
-        let items = self
-            .env
-            .resolver
-            .serialized_files()?
-            .par_iter()
-            .try_fold(Vec::new, |mut a, path| -> Result<_> {
+        let items =
+            par_fold_reduce::<Vec<_>, _>(self.env.resolver.serialized_files()?, |acc, path| {
                 let path_str = path.to_str().unwrap();
 
                 if count.load(Ordering::Relaxed) > limit {
                     let mut i = 0;
                     self.scan_file(path_str, script_filter, |_, _, _| Ok(i += 1))?;
                     count.fetch_add(i, Ordering::Relaxed);
-                    return Ok(a);
+                    return Ok(());
                 }
 
                 let mut results = Vec::new();
@@ -111,13 +107,9 @@ impl UniScan {
                     }
                     Ok(())
                 })?;
-                a.extend(results);
+                acc.extend(results);
 
-                Ok(a)
-            })
-            .try_reduce(Vec::new, |mut a, b| {
-                a.extend(b);
-                Ok(a)
+                Ok(())
             })?;
 
         Ok(ScanResults {
