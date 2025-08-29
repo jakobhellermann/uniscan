@@ -1,5 +1,6 @@
 def maybe(f): if . != null then f else null end;
 def nonnull: select(. != null);
+def filterkeys(text): with_entries(select(.key | contains(text)));
 
 def go: .m_GameObject | deref;
 def name: if .m_Name != "" then .m_Name else go | .m_Name end;
