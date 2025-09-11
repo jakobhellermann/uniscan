@@ -142,11 +142,10 @@ impl UniScan {
             ObjectRefHandle<MonoBehaviour>,
         ) -> Result<()>,
     ) -> Result<()> {
-        let (file, data) = self
+        let file = self
             .env
-            .load_leaf(path)
+            .load_cached(path)
             .with_context(|| format!("Could not load '{path}'"))?;
-        let file = SerializedFileHandle::new(&self.env, &file, data.as_ref());
 
         for mb in file.objects_of::<MonoBehaviour>()? {
             let Some(script) = mb.mono_script()? else {
