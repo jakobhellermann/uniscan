@@ -2718,7 +2718,7 @@ dependencies = [
 [[package]]
 name = "rabex-env"
 version = "0.1.0"
-source = "git+https://github.com/jakobhellermann/rabex-env#47fefe68b178fd5e47e0c354f7c9238a3a5c04f3"
+source = "git+https://github.com/jakobhellermann/rabex-env#07f8028e6bedc2dccc4807893cf4e5f1e0737eba"
 dependencies = [
  "anyhow",
  "elsa",
@@ -2729,7 +2729,9 @@ dependencies = [
  "rustc-hash 2.1.1",
  "serde",
  "serde_derive",
+ "serde_json",
  "typetree-generator-api",
+ "walkdir",
 ]
 
 [[package]]

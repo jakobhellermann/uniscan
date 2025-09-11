@@ -10,8 +10,8 @@ use rabex_env::game_files::GameFiles;
 use rabex_env::handle::{ObjectRefHandle, SerializedFileHandle};
 use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::utils::par_fold_reduce;
-use rabex_env::{EnvResolver, Environment};
-use std::path::Path;
+use rabex_env::{EnvResolver as _, Environment, addressables};
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -85,45 +85,54 @@ impl UniScan {
         let count = AtomicUsize::new(0);
         let query_count = AtomicUsize::new(0);
 
-        let items =
-            par_fold_reduce::<Vec<_>, _>(self.env.resolver.serialized_files()?, |acc, path| {
-                let path_str = path.to_str().unwrap();
+        let mut files = self.env.resolver.serialized_files()?;
+        if let Some(aa) = self.env.addressables()? {
+            files.extend(
+                aa.cab_to_bundle
+                    .keys()
+                    .filter(|cab| !cab.ends_with(".resource") && !cab.ends_with(".resS"))
+                    .map(|cab| PathBuf::from(rabex_env::addressables::wrap_archive(cab))),
+            );
+        }
 
-                if count.load(Ordering::Relaxed) > limit {
-                    let mut i = 0;
-                    self.scan_file(path_str, script_filter, |_, _, _| Ok(i += 1))?;
-                    count.fetch_add(i, Ordering::Relaxed);
+        let items = par_fold_reduce::<Vec<_>, _>(files, |acc, path| {
+            let path_str = path.to_str().unwrap();
+
+            if count.load(Ordering::Relaxed) > limit {
+                let mut i = 0;
+                self.scan_file(path_str, script_filter, |_, _, _| Ok(i += 1))?;
+                count.fetch_add(i, Ordering::Relaxed);
+                return Ok(());
+            }
+
+            self.scan_file(path_str, script_filter, |file, script, mb| {
+                if count.fetch_add(1, Ordering::Relaxed) >= limit {
                     return Ok(());
                 }
 
-                self.scan_file(path_str, script_filter, |file, script, mb| {
-                    if count.fetch_add(1, Ordering::Relaxed) >= limit {
+                let data = mb.cast::<jaq_json::Val>().read().with_context(|| {
+                    format!("Failed to deserialize {} in {}", mb.path_id(), path_str)
+                });
+                let mut data = match data {
+                    Ok(value) => value,
+                    Err(e) => {
+                        eprintln!("{e:?}");
                         return Ok(());
                     }
+                };
+                self.enrich_object(path_str, file, script, &mut data)?;
 
-                    let data = mb.cast::<jaq_json::Val>().read().with_context(|| {
-                        format!("Failed to deserialize {} in {}", mb.path_id(), path_str)
-                    });
-                    let mut data = match data {
-                        Ok(value) => value,
-                        Err(e) => {
-                            eprintln!("{e:?}");
-                            return Ok(());
-                        }
-                    };
-                    self.enrich_object(path_str, file, script, &mut data)?;
+                let query_result = self.query.exec(data)?;
+                query_count.fetch_add(query_result.len(), Ordering::SeqCst);
 
-                    let query_result = self.query.exec(data)?;
-                    query_count.fetch_add(query_result.len(), Ordering::SeqCst);
-
-                    for value in query_result {
-                        acc.push(serde_json::Value::from(value));
-                    }
-                    Ok(())
-                })?;
-
+                for value in query_result {
+                    acc.push(serde_json::Value::from(value));
+                }
                 Ok(())
             })?;
+
+            Ok(())
+        })?;
 
         Ok(ScanResults {
             items,
@@ -197,6 +206,16 @@ pub(crate) fn enrich_object(
             Rc::new("_asm".into()),
             script.assembly_name().into_owned().into(),
         );
+    }
+
+    if let Some(cab) = addressables::unwrap_archive(Path::new(path_str)) {
+        if let Ok(Some(aa)) = file.env.addressables() {
+            let bundle = aa.cab_to_bundle.get(cab).unwrap();
+
+            data_obj.insert(Rc::new("_file".into()), bundle.display().to_string().into());
+        }
+    } else {
+        data_obj.insert(Rc::new("_file".into()), path_str.to_owned().into());
     }
 
     if let Some(scene_names) = scene_names
