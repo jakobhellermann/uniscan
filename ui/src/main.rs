@@ -137,6 +137,7 @@ impl App {
 
         self.gameselect.game_selection = SelectedGame::None;
 
+        self.uniscan.clear_poison();
         *self.uniscan.lock().unwrap() = None;
         // TODO: cancel tasks?
     }
