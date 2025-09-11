@@ -30,7 +30,7 @@ jaq-std = { version = "2.1", default-features = true, features = [
 workspace = true
 
 [workspace]
-package.version = "1.0.0"
+package.version = "1.1.0"
 package.edition = "2024"
 package.license = "MIT"
 members = [".", "ui"]

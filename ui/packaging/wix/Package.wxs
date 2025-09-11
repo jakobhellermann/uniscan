@@ -2,7 +2,7 @@
     <Package
         Name="Uniscan"
         Manufacturer="JJ"
-        Version="1.0.0.0"
+        Version="1.1.0.0"
         UpgradeCode="23d72928-990f-47fe-9d6a-57e5addeb3c9"
     >
         <MediaTemplate EmbedCab="true" />
