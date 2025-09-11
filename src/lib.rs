@@ -3,7 +3,7 @@ pub mod query;
 
 use query::QueryRunner;
 
-use anyhow::{Context, Ok, Result};
+use anyhow::{Context, Result};
 use rabex::tpk::TpkTypeTreeBlob;
 use rabex::typetree::typetree_cache::sync::TypeTreeCache;
 use rabex_env::game_files::GameFiles;
@@ -101,7 +101,16 @@ impl UniScan {
                         return Ok(());
                     }
 
-                    let mut data = mb.cast::<jaq_json::Val>().read()?;
+                    let data = mb.cast::<jaq_json::Val>().read().with_context(|| {
+                        format!("Failed to deserialize {} in {}", mb.path_id(), path_str)
+                    });
+                    let mut data = match data {
+                        Ok(value) => value,
+                        Err(e) => {
+                            eprintln!("{e:?}");
+                            return Ok(());
+                        }
+                    };
                     self.enrich_object(path_str, file, script, &mut data)?;
 
                     let query_result = self.query.exec(data)?;
