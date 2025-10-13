@@ -1,3 +1,4 @@
+use std::fmt::Write;
 pub mod qualify_pptr;
 pub mod query;
 
@@ -126,7 +127,7 @@ impl UniScan {
                 return Ok(());
             }
 
-            let path_str = path.to_str().unwrap();
+            let path_str = format_path(&path);
 
             let progress = file_progress.fetch_add(1, Ordering::Relaxed) + 1;
             if progress % 100 == 0 {
@@ -135,12 +136,12 @@ impl UniScan {
 
             if count.load(Ordering::Relaxed) > limit {
                 let mut i = 0;
-                self.scan_file(path_str, script_filter, |_, _, _| Ok(i += 1))?;
+                self.scan_file(&path_str, script_filter, |_, _, _| Ok(i += 1))?;
                 count.fetch_add(i, Ordering::Relaxed);
                 return Ok(());
             }
 
-            self.scan_file(path_str, script_filter, |file, script, mb| {
+            self.scan_file(&path_str, script_filter, |file, script, mb| {
                 if count.fetch_add(1, Ordering::Relaxed) >= limit {
                     return Ok(());
                 }
@@ -155,7 +156,7 @@ impl UniScan {
                         return Ok(());
                     }
                 };
-                self.enrich_object(path_str, file, script, &mut data)?;
+                self.enrich_object(&path_str, file, script, &mut data)?;
 
                 let query_result = self.query.exec(data)?;
                 query_count.fetch_add(query_result.len(), Ordering::SeqCst);
@@ -249,13 +250,12 @@ pub(crate) fn enrich_object(
         if let Ok(Some(aa)) = file.env.addressables() {
             let bundle = aa.cab_to_bundle.get(cab.bundle).unwrap();
 
-            let file = if cab.bundle != cab.file {
-                format!("{} ({})", bundle.display(), cab.file)
-            } else {
-                bundle.display().to_string()
-            };
+            let mut formatted = format_path(bundle);
+            if cab.bundle != cab.file {
+                let _ = write!(&mut formatted, " ({})", cab.file);
+            }
 
-            data_obj.insert("_file".to_string().into(), file.into());
+            data_obj.insert("_file".to_string().into(), formatted.into());
         }
     } else {
         data_obj.insert("_file".to_string().into(), path_str.to_owned().into());
@@ -272,6 +272,14 @@ pub(crate) fn enrich_object(
 
     *data = jaq_json::Val::obj(data_obj);
     Ok(())
+}
+
+fn format_path(path: &Path) -> String {
+    let formatted = path.display().to_string();
+    #[cfg(not(target_os = "windows"))]
+    return formatted;
+    #[cfg(target_os = "windows")]
+    return formatted.replace('\\', "/");
 }
 
 const MIN_LOG_DURATION: std::time::Duration = std::time::Duration::from_millis(1);
