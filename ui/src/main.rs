@@ -19,7 +19,7 @@ use xilem::style::{Background, Padding, Style};
 use xilem::tokio::sync::mpsc::UnboundedSender;
 use xilem::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, portal,
-    prose, sized_box, text_input, virtual_scroll, worker, worker_raw,
+    progress_bar, prose, sized_box, text_input, virtual_scroll, worker, worker_raw,
 };
 use xilem::{Color, EventLoop, ViewCtx, WidgetView, WindowOptions, Xilem};
 
@@ -73,6 +73,7 @@ struct App {
 
     // Shared
     error: Result<()>,
+    progress: Option<f64>,
     sender_rescan: Option<UnboundedSender<rescan::Request>>,
     sender_generic: Option<UnboundedSender<generic::Request>>,
     uniscan: Arc<Mutex<Option<UniScan>>>,
@@ -97,6 +98,7 @@ impl Default for App {
             },
 
             error: Result::Ok(()),
+            progress: None,
             sender_rescan: None,
             sender_generic: None,
             uniscan: Default::default(),
@@ -189,15 +191,17 @@ impl App {
         }
     }
     fn reload(&self) {
-        let query = match self.main.query_raw.as_str() {
-            "" => ".".into(),
-            other => other.to_owned(),
-        };
+        utils::time("send rescan", || {
+            let query = match self.main.query_raw.as_str() {
+                "" => ".".into(),
+                other => other.to_owned(),
+            };
 
-        self.send_rescan_command(rescan::Request::Scan {
-            query,
-            script: self.main.script_filter.clone(),
-            limit: self.main.limit.last_valid,
+            self.send_rescan_command(rescan::Request::Scan {
+                query,
+                script: self.main.script_filter.clone(),
+                limit: self.main.limit.last_valid,
+            });
         });
     }
 
@@ -356,7 +360,11 @@ impl App {
             }),
             sized_box(content).expand_height().flex(1.0),
             flex_row((
-                button("Back", App::go_to_gameselect),
+                sized_box(button("Back", App::go_to_gameselect)),
+                flex_row((self
+                    .progress
+                    .map(|progress| progress_bar(Some(progress)).flex(1.)),))
+                .flex(1.),
                 flex_row((
                     label("Limit:"),
                     sized_box(number_input(
@@ -438,6 +446,13 @@ impl App {
                             state.main.results = Some(scan);
                         }
                         rescan::Response::Error(err) => state.set_error(err),
+                        rescan::Response::ProgressUpdate { total, current } => {
+                            if current != total {
+                                state.progress = Some((current as f64) / (total as f64))
+                            } else {
+                                state.progress = None;
+                            }
+                        }
                     },
                     Err(err) => state.set_error(err),
                 },

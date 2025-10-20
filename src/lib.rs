@@ -84,10 +84,7 @@ impl UniScan {
         })
     }
 
-    pub fn scan_all(&self, script_filter: &ScriptFilter, limit: usize) -> Result<ScanResults> {
-        let count = AtomicUsize::new(0);
-        let query_count = AtomicUsize::new(0);
-
+    pub fn collect_files(&self) -> Result<Vec<PathBuf>, anyhow::Error> {
         let mut files = self.env.resolver.serialized_files()?;
         if let Some(aa) = self.env.addressables()? {
             files.extend(
@@ -97,9 +94,30 @@ impl UniScan {
                     .map(|cab| PathBuf::from(ArchivePath::same(cab))),
             );
         }
+        Ok(files)
+    }
+
+    pub fn scan_all(&self, script_filter: &ScriptFilter, limit: usize) -> Result<ScanResults> {
+        self.scan_all_files(script_filter, limit, self.collect_files()?, &|_| {})
+    }
+
+    pub fn scan_all_files(
+        &self,
+        script_filter: &ScriptFilter,
+        limit: usize,
+        files: Vec<PathBuf>,
+        emit_progress: &(dyn Fn(usize) + Sync),
+    ) -> Result<ScanResults> {
+        let count = AtomicUsize::new(0);
+        let query_count = AtomicUsize::new(0);
+
+        let file_progress = AtomicUsize::new(0);
 
         let items = par_fold_reduce::<Vec<_>, _>(files, |acc, path| {
             let path_str = path.to_str().unwrap();
+
+            let progress = file_progress.fetch_add(1, Ordering::Relaxed) + 1;
+            emit_progress(progress);
 
             if count.load(Ordering::Relaxed) > limit {
                 let mut i = 0;
