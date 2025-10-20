@@ -63,7 +63,9 @@ impl UniScan {
 
         let tpk = TypeTreeCache::new(TpkTypeTreeBlob::embedded());
         let mut env = Environment::new(game_files, tpk);
-        env.load_typetree_generator(GeneratorBackend::default())?;
+        if let Err(e) = env.load_typetree_generator(GeneratorBackend::default()) {
+            tracing::warn!("{e}");
+        }
         let env = Arc::new(env);
         QueryRunner::set_env(Arc::clone(&env));
 
