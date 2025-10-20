@@ -1,3 +1,4 @@
 /target
+/out
 
 /ui/{lib,}TypeTreeGeneratorAPI.{so,dll,dylib}

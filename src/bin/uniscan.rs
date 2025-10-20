@@ -22,7 +22,7 @@ fn main() -> Result<()> {
     let scan = uniscan.scan_all(&script_filter, usize::MAX)?;
     print_all(&scan.items);
 
-    println!("{} items in {:?}", scan.count, start.elapsed());
+    eprintln!("{} items in {:?}", scan.count, start.elapsed());
 
     Ok(())
 }
