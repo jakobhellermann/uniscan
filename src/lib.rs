@@ -3,19 +3,20 @@ pub mod query;
 
 use query::QueryRunner;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, anyhow};
 use rabex::tpk::TpkTypeTreeBlob;
 use rabex::typetree::typetree_cache::sync::TypeTreeCache;
+use rabex_env::addressables::ArchivePath;
 use rabex_env::game_files::GameFiles;
 use rabex_env::handle::{ObjectRefHandle, SerializedFileHandle};
+use rabex_env::typetree_generator_api::GeneratorBackend;
 use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::utils::par_fold_reduce;
-use rabex_env::{EnvResolver as _, Environment, addressables};
+use rabex_env::{EnvResolver as _, Environment};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use typetree_generator_api::GeneratorBackend;
 
 pub struct UniScan {
     pub env: Arc<Environment>,
@@ -91,7 +92,7 @@ impl UniScan {
                 aa.cab_to_bundle
                     .keys()
                     .filter(|cab| !cab.ends_with(".resource") && !cab.ends_with(".resS"))
-                    .map(|cab| PathBuf::from(rabex_env::addressables::wrap_archive(cab))),
+                    .map(|cab| PathBuf::from(ArchivePath::same(cab))),
             );
         }
 
@@ -126,7 +127,8 @@ impl UniScan {
                 query_count.fetch_add(query_result.len(), Ordering::SeqCst);
 
                 for value in query_result {
-                    acc.push(serde_json::Value::from(value));
+                    // PERF: pass ownership
+                    acc.push(serde_json::Value::try_from(&value).map_err(|e| anyhow!("{e}"))?);
                 }
                 Ok(())
             })?;
@@ -156,7 +158,7 @@ impl UniScan {
             .load_cached(path)
             .with_context(|| format!("Could not load '{path}'"))?;
 
-        for mb in file.objects_of::<MonoBehaviour>()? {
+        for mb in file.objects_of::<MonoBehaviour>() {
             let Some(script) = mb.mono_script()? else {
                 continue;
             };
@@ -195,27 +197,33 @@ pub(crate) fn enrich_object(
         jaq_json::Val::Obj(obj) => Rc::into_inner(obj).expect("references hanging around"),
         _ => unreachable!(),
     };
-    data_obj.insert(Rc::new("_file".into()), path_str.to_owned().into());
+    data_obj.insert("_file".to_string().into(), path_str.to_owned().into());
 
     if let Some(script) = script {
         data_obj.insert(
-            Rc::new("_type".into()),
+            "_type".to_string().into(),
             script.full_name().into_owned().into(),
         );
         data_obj.insert(
-            Rc::new("_asm".into()),
+            "_asm".to_string().into(),
             script.assembly_name().into_owned().into(),
         );
     }
 
-    if let Some(cab) = addressables::unwrap_archive(Path::new(path_str)) {
+    if let Some(cab) = ArchivePath::try_parse(Path::new(path_str))? {
         if let Ok(Some(aa)) = file.env.addressables() {
-            let bundle = aa.cab_to_bundle.get(cab).unwrap();
+            let bundle = aa.cab_to_bundle.get(cab.bundle).unwrap();
 
-            data_obj.insert(Rc::new("_file".into()), bundle.display().to_string().into());
+            let file = if cab.bundle != cab.file {
+                format!("{} ({})", bundle.display(), cab.file)
+            } else {
+                bundle.display().to_string()
+            };
+
+            data_obj.insert("_file".to_string().into(), file.into());
         }
     } else {
-        data_obj.insert(Rc::new("_file".into()), path_str.to_owned().into());
+        data_obj.insert("_file".to_string().into(), path_str.to_owned().into());
     }
 
     if let Some(scene_names) = scene_names
@@ -224,7 +232,7 @@ pub(crate) fn enrich_object(
             .and_then(|x| x.parse::<usize>().ok())
     {
         let scene_name = &scene_names[scene_index];
-        data_obj.insert(Rc::new("_scene".into()), scene_name.clone().into());
+        data_obj.insert("_scene".to_string().into(), scene_name.clone().into());
     }
 
     *data = jaq_json::Val::obj(data_obj);

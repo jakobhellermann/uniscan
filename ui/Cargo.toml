@@ -10,9 +10,9 @@ name = "uniscan"
 path = "src/main.rs"
 
 [dependencies]
-masonry = { git = "https://github.com/jakobhellermann/xilem", branch = "accesskit-tokio" }
-masonry_winit = { git = "https://github.com/jakobhellermann/xilem", branch = "accesskit-tokio" }
-xilem = { git = "https://github.com/jakobhellermann/xilem", branch = "accesskit-tokio" }
+masonry = { git = "https://github.com/linebender/xilem", rev = "e658482" }
+masonry_winit = { git = "https://github.com/linebender/xilem", rev = "e658482" }
+xilem = { git = "https://github.com/linebender/xilem", rev = "e658482" }
 
 rabex-env.workspace = true
 rabex.workspace = true

@@ -38,7 +38,7 @@ pub async fn worker(proxy: MessageProxy<Result<Response>>, mut rx: UnboundedRece
                     env.resolver.serialized_files()?,
                     move |scripts, path| {
                         let file = env.load_cached(path)?;
-                        for mb in file.objects_of::<MonoBehaviour>()? {
+                        for mb in file.objects_of::<MonoBehaviour>() {
                             let Some(script) = mb.mono_script()? else {
                                 continue;
                             };

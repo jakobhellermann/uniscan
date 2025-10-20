@@ -5,7 +5,6 @@ use jaq_std::input::{self, Inputs};
 use rabex::objects::PPtr;
 use rabex_env::Environment;
 use serde::Deserialize;
-use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
 use crate::qualify_pptr::{QualifiedPPtr, qualify_pptrs};
@@ -14,7 +13,10 @@ fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
     let env = ENV.read().unwrap();
     let env = env.as_ref().unwrap();
 
-    let qualified_pptr = QualifiedPPtr::deserialize(serde_json::Value::from(pptr))?;
+    // PERF: pass ownership
+    let qualified_pptr = QualifiedPPtr::deserialize(
+        serde_json::Value::try_from(&pptr).map_err(|e| anyhow::anyhow!("{e}"))?,
+    )?;
 
     let file = env.load_cached(&qualified_pptr.file).unwrap();
     let pptr = PPtr::local(qualified_pptr.path_id).typed::<jaq_json::Val>();
@@ -146,7 +148,7 @@ impl QueryRunner {
         };
         let out = self.filter.id.run::<DataKind>((
             // jaq_core::Ctx::new([jaq_json::Val::Str(Rc::new("hi".into()))], &inputs),
-            jaq_core::Ctx::new(&data, Vars::new([jaq_json::Val::Str(Rc::new("hi".into()))])),
+            jaq_core::Ctx::new(&data, Vars::new([jaq_json::Val::utf8_str("hi")])),
             item,
         ));
 

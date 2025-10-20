@@ -12,13 +12,11 @@ rayon = "1.11"
 serde = { version = "1.0", default-features = false }
 serde_derive = "1.0"
 serde_json = { version = "1.0", features = ["indexmap"] }
-typetree-generator-api.workspace = true
 rabex-env.workspace = true
 
 jaq-core = "2.2"
 jaq-json = { version = "1.1", default-features = true, features = [
     "serde_json",
-    "parse",
     "deserialize",
 ] }
 jaq-std = { version = "2.1", default-features = true, features = [
@@ -37,8 +35,7 @@ members = [".", "ui"]
 default-members = ["ui"]
 
 [workspace.dependencies]
-rabex-env = { git = "https://github.com/jakobhellermann/rabex-env" }
-typetree-generator-api = { git = "https://github.com/jakobhellermann/unity-scene-repacker", rev = "4e9e56" }
+rabex-env = { git = "https://github.com/jakobhellermann/rabex-env", branch = "addressables-catalog" }
 rabex = { git = "https://github.com/jakobhellermann/RustyAssetBundleEXtractor", branch = "all", default-features = false, features = [
     "embed-tpk",
     # "serde_path_to_error", nicer errors for debugging, at a 2x speed cost
@@ -54,6 +51,9 @@ lto = "thin"
 opt-level = 2
 
 [patch.crates-io]
-jaq-core = { git = "https://github.com/jakobhellermann/jaq", branch = "jaq-json-deserialize" }
-jaq-std = { git = "https://github.com/jakobhellermann/jaq", branch = "jaq-json-deserialize" }
-jaq-json = { git = "https://github.com/jakobhellermann/jaq", branch = "jaq-json-deserialize" }
+jaq-core = { git = "https://github.com/jakobhellermann/jaq", branch = "dev" }
+jaq-std = { git = "https://github.com/jakobhellermann/jaq", branch = "dev" }
+jaq-json = { git = "https://github.com/jakobhellermann/jaq", branch = "dev" }
+
+regex-lite = { git = 'https://github.com/01mf02/regex', package = 'regex-lite', branch = 'bytes' }
+hifijson = { git = "https://github.com/01mf02/hifijson" }

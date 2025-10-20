@@ -1,6 +1,7 @@
 use std::rc::Rc;
 
 use anyhow::{Context as _, Result};
+use jaq_std::ValT;
 use rabex::objects::PPtr;
 use rabex::objects::pptr::{FileId, PathId};
 use rabex::typetree::TypeTreeProvider;
@@ -31,14 +32,14 @@ pub fn qualify_pptrs<R: BasedirEnvResolver, P: TypeTreeProvider>(
             if map.len() == 2
                 && let Some(file_id) = map
                     .iter()
-                    .find(|x| **x.0 == "m_FileID")
-                    .and_then(|(_, x)| x.as_int().ok())
+                    .find(|x| x.0.as_utf8_bytes() == Some(b"m_FileID"))
+                    .and_then(|(_, x)| x.as_isize())
                 && let Some(path_id) = map
                     .iter()
-                    .find(|x| **x.0 == "m_PathID")
-                    .and_then(|(_, x)| x.as_int().ok())
+                    .find(|x| x.0.as_utf8_bytes() == Some(b"m_PathID"))
+                    .and_then(|(_, x)| x.as_isize())
             {
-                let pptr = PPtr::new(file_id as FileId, path_id as PathId).optional();
+                let pptr = PPtr::new(FileId::new(file_id as i32), path_id as PathId).optional();
                 match pptr {
                     Some(pptr) => {
                         let pptr_file = if pptr.is_local() {
@@ -53,9 +54,12 @@ pub fn qualify_pptrs<R: BasedirEnvResolver, P: TypeTreeProvider>(
                         let class_id = file.deref(pptr.typed::<()>())?.object.info.m_ClassID;
 
                         let mut obj = jaq_json::Map::default();
-                        obj.insert(Rc::new("file".into()), pptr_file.into());
-                        obj.insert(Rc::new("path_id".into()), path_id.into());
-                        obj.insert(Rc::new("class_id".into()), format!("{class_id:?}").into());
+                        obj.insert("file".to_string().into(), pptr_file.into());
+                        obj.insert("path_id".to_string().into(), path_id.into());
+                        obj.insert(
+                            "class_id".to_string().into(),
+                            format!("{class_id:?}").into(),
+                        );
                         jaq_json::Val::Obj(Rc::new(obj))
                     }
                     None => jaq_json::Val::Null,
