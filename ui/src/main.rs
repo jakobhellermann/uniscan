@@ -398,7 +398,7 @@ impl App {
             .as_ref()
             .err()
             .map(|e| {
-                prose(format!("{:?}", e))
+                prose(format!("{:#?}", e))
                     .line_break_mode(masonry::properties::LineBreaking::WordWrap)
                     .text_color(COLOR_ERROR)
                     .boxed()
