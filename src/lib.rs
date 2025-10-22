@@ -119,6 +119,7 @@ impl UniScan {
         let file_progress = AtomicUsize::new(0);
         let len = files.len();
 
+        self.cancel.store(false, Ordering::Relaxed);
         let items = par_fold_reduce::<Vec<_>, _>(files, |acc, path| {
             if self.cancel.load(Ordering::Acquire) {
                 tracing::debug!("Cancelled scan");

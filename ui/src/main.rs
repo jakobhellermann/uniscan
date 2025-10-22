@@ -199,6 +199,7 @@ impl App {
     }
 
     fn reload(&self) {
+        self.cancel_scan();
         utils::time("send rescan", || {
             let query = match self.main.query_raw.as_str() {
                 "" => ".".into(),
