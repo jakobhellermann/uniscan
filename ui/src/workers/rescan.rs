@@ -59,7 +59,10 @@ pub async fn worker(
                         let start = Instant::now();
 
                         uniscan.scan_all_files(&script, limit, files, &|progress| {
-                            let fast = start.elapsed() < Duration::from_millis(100);
+                            const FAST_NO_PROGRESSBAR_THRESHOLD: Duration =
+                                Duration::from_millis(50);
+
+                            let fast = start.elapsed() < FAST_NO_PROGRESSBAR_THRESHOLD;
                             if fast && total != progress {
                                 return;
                             }
