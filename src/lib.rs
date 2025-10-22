@@ -63,9 +63,12 @@ impl UniScan {
 
         let tpk = TypeTreeCache::new(TpkTypeTreeBlob::embedded());
         let mut env = Environment::new(game_files, tpk);
-        if let Err(e) = env.load_typetree_generator(GeneratorBackend::default()) {
-            tracing::warn!("{e}");
-        }
+
+        time("load_typetree_generator", || {
+            if let Err(e) = env.load_typetree_generator(GeneratorBackend::default()) {
+                tracing::warn!("{e}");
+            }
+        });
         let env = Arc::new(env);
         QueryRunner::set_env(Arc::clone(&env));
 
@@ -112,12 +115,15 @@ impl UniScan {
         let query_count = AtomicUsize::new(0);
 
         let file_progress = AtomicUsize::new(0);
+        let len = files.len();
 
         let items = par_fold_reduce::<Vec<_>, _>(files, |acc, path| {
             let path_str = path.to_str().unwrap();
 
             let progress = file_progress.fetch_add(1, Ordering::Relaxed) + 1;
-            emit_progress(progress);
+            if progress % 100 == 0 {
+                emit_progress(progress);
+            }
 
             if count.load(Ordering::Relaxed) > limit {
                 let mut i = 0;
@@ -155,6 +161,7 @@ impl UniScan {
 
             Ok(())
         })?;
+        emit_progress(len);
 
         Ok(ScanResults {
             items,
@@ -257,4 +264,14 @@ pub(crate) fn enrich_object(
 
     *data = jaq_json::Val::obj(data_obj);
     Ok(())
+}
+
+const MIN_LOG_DURATION: std::time::Duration = std::time::Duration::from_millis(1);
+pub fn time<T>(name: &'static str, f: impl FnOnce() -> T) -> T {
+    let start = std::time::Instant::now();
+    let res = f();
+    if start.elapsed() > MIN_LOG_DURATION {
+        tracing::info!("{name}: {:?}", start.elapsed());
+    }
+    res
 }

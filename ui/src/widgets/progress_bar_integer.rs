@@ -11,6 +11,7 @@ impl Progress {
     pub fn unfinished(self) -> Option<Self> {
         match self {
             Progress::Done => None,
+            Progress::Progress { current, max } if current == max => None,
             other => Some(other),
         }
     }

@@ -1,20 +1,39 @@
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
+use rabex_env::EnvResolver;
 use rabex_env::unity::types::MonoBehaviour;
-use rabex_env::{EnvResolver, Environment};
+use tracing::warn;
+use uniscan::UniScan;
 use xilem::core::MessageProxy;
 use xilem::tokio;
 use xilem::tokio::sync::mpsc::UnboundedReceiver;
 
-#[derive(Debug)]
+use crate::widgets::progress_bar_integer::Progress;
+
 pub enum Response {
     Noop,
     OpenAnotherGame(Option<PathBuf>),
     Stats(Stats),
+    Loaded(UniScan),
+    Progress(Progress),
 }
+
+impl std::fmt::Debug for Response {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Noop => write!(f, "Noop"),
+            Self::OpenAnotherGame(game) => f.debug_tuple("OpenAnotherGame").field(game).finish(),
+            Self::Stats(stats) => f.debug_tuple("Stats").field(stats).finish(),
+            Self::Loaded(_) => f.debug_tuple("Loaded").finish_non_exhaustive(),
+            Self::Progress(progress) => f.debug_tuple("Progress").field(&progress).finish(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Stats {
     pub most_used_script: String,
@@ -23,7 +42,7 @@ pub struct Stats {
 pub enum Request {
     Save(String),
     OpenGame,
-    GetStats(Arc<Environment>),
+    LoadGame(PathBuf),
 }
 
 pub async fn worker(proxy: MessageProxy<Result<Response>>, mut rx: UnboundedReceiver<Request>) {
@@ -33,36 +52,66 @@ pub async fn worker(proxy: MessageProxy<Result<Response>>, mut rx: UnboundedRece
             Request::OpenGame => open_folder("Open unity game")
                 .await
                 .map(Response::OpenAnotherGame),
-            Request::GetStats(env) => tokio::task::spawn_blocking(|| {
-                let result = rabex_env::utils::par_fold_reduce::<HashMap<String, usize>, _>(
-                    env.resolver.serialized_files()?,
-                    move |scripts, path| {
-                        let file = env.load_cached(path)?;
-                        for mb in file.objects_of::<MonoBehaviour>() {
-                            let Some(script) = mb.mono_script()? else {
-                                continue;
-                            };
-                            *scripts.entry(script.full_name().into_owned()).or_default() += 1;
-                        }
-                        Ok(())
-                    },
-                )?;
-                let most_used_script = result
-                    .into_iter()
-                    .max_by_key(|(_, c)| *c)
-                    .map(|(script, _)| script);
+            Request::LoadGame(path) => {
+                let _proxy = proxy.clone();
+                if let Err(e) = tokio::task::spawn_blocking(move || -> Result<_> {
+                    let emit_progress = |msg| {
+                        _proxy
+                            .message(Ok(Response::Progress(Progress::Text(msg))))
+                            .log_error();
+                    };
 
-                Ok(Stats {
-                    most_used_script: most_used_script.unwrap_or_default(),
+                    emit_progress("Generating typetrees");
+                    let uniscan = UniScan::new(&path, ".")?;
+                    let env = Arc::clone(&uniscan.env);
+
+                    _proxy.message(Ok(Response::Loaded(uniscan))).log_error();
+                    emit_progress("Reading game files");
+
+                    let result = rabex_env::utils::par_fold_reduce::<HashMap<String, usize>, _>(
+                        env.resolver.serialized_files()?,
+                        move |scripts, path| {
+                            let file = env.load_cached(path)?;
+                            for mb in file.objects_of::<MonoBehaviour>() {
+                                let Some(script) = mb.mono_script()? else {
+                                    continue;
+                                };
+                                *scripts.entry(script.full_name().into_owned()).or_default() += 1;
+                            }
+                            Ok(())
+                        },
+                    )?;
+                    let most_used_script = result
+                        .into_iter()
+                        .max_by_key(|(_, c)| *c)
+                        .map(|(script, _)| script);
+
+                    _proxy
+                        .message(Ok(Response::Stats(Stats {
+                            most_used_script: most_used_script.unwrap_or_default(),
+                        })))
+                        .log_error();
+
+                    Ok(())
                 })
-            })
-            .await
-            .map_err(|e| anyhow::anyhow!("{e}"))
-            .flatten()
-            .map(Response::Stats),
+                .await
+                {
+                    proxy.message(Err(e.into())).log_error();
+                }
+                continue;
+            }
         };
-        if proxy.message(result).is_err() {
-            eprintln!("Could not send rescan result to UI");
+        proxy.message(result).log_error();
+    }
+}
+
+trait LogError {
+    fn log_error(self);
+}
+impl<T, E: Display> LogError for Result<T, E> {
+    fn log_error(self) {
+        if let Err(e) = self {
+            warn!("{e}");
         }
     }
 }

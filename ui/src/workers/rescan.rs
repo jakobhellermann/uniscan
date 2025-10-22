@@ -44,26 +44,16 @@ pub async fn worker(
                 script,
                 limit,
             } => {
-                // let uniscan = uniscan.as_mut().unwrap();
-
                 let uniscan = Arc::clone(&uniscan);
                 let _proxy = proxy.clone();
                 let res = tokio::task::spawn_blocking(move || {
-                    tracing::info!("Start rescan");
-
-                    let _ =
-                        _proxy.message(Ok(Response::ProgressUpdate(Progress::Text("Scanning"))));
-
                     let mut uniscan = uniscan.lock().unwrap_or_else(PoisonError::into_inner);
                     let Some(uniscan) = uniscan.as_mut() else {
                         return Ok(ScanResults::default());
                     };
                     uniscan.query.set_query(&query)?;
                     utils::time("rescan", || {
-                        let _ = _proxy.message(Ok(Response::ProgressUpdate(Progress::Text(
-                            "Collecting files",
-                        ))));
-                        let files = uniscan.collect_files()?;
+                        let files = utils::time("collect files", || uniscan.collect_files())?;
                         let total = files.len();
 
                         let start = Instant::now();

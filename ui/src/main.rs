@@ -123,15 +123,9 @@ impl App {
 
         self.view = View::Main;
         self.clear_error();
-        self.set_error_with(|app| {
-            utils::time("game init", || {
-                let uniscan = UniScan::new(&app.selected_game().path, ".")?;
-                let env = Arc::clone(&uniscan.env);
-                *app.uniscan.lock().unwrap() = Some(uniscan);
-                app.send_command(generic::Request::GetStats(env));
-                Ok(())
-            })
-        });
+        self.send_command(generic::Request::LoadGame(
+            self.selected_game().path.clone(),
+        ));
     }
     fn go_to_gameselect(&mut self) {
         self.view = View::GameSelect;
@@ -437,6 +431,10 @@ impl App {
                                 state.set_script_filter(stats.most_used_script);
                             }
                         }
+                        generic::Response::Loaded(uni_scan) => {
+                            *state.uniscan.lock().unwrap() = Some(uni_scan);
+                        }
+                        generic::Response::Progress(progress) => state.progress = progress,
                     },
                     Err(err) => state.set_error(err),
                 },
