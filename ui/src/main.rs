@@ -448,7 +448,8 @@ impl App {
                         rescan::Response::Error(err) => state.set_error(err),
                         rescan::Response::ProgressUpdate { total, current } => {
                             if current != total {
-                                state.progress = Some((current as f64) / (total as f64))
+                                let progress = (current as f64) / (total as f64);
+                                state.progress = Some((progress * 100.).trunc() / 100.)
                             } else {
                                 state.progress = None;
                             }
