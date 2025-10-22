@@ -44,7 +44,8 @@ rabex = { git = "https://github.com/jakobhellermann/RustyAssetBundleEXtractor", 
 [workspace.lints.clippy]
 unit_arg = "allow"
 
-[profile.release]
+[profile.release-full]
+inherits = "release"
 strip = "symbols"
 lto = "thin"
 
