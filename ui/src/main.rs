@@ -23,7 +23,8 @@ use xilem::view::{
 };
 use xilem::{Color, EventLoop, ViewCtx, WidgetView, WindowOptions, Xilem};
 
-use widgets::{NumberInputState, margin, number_input};
+use widgets::margin;
+use widgets::number_input::{NumberInputState, number_input};
 
 use crate::workers::{generic, rescan};
 

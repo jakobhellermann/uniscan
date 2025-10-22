@@ -1,19 +1,7 @@
 use std::fmt::Display;
 use std::str::FromStr;
 
-use xilem::WidgetView;
-use xilem::style::{Padding, Style};
-use xilem::view::{TextInput, sized_box, text_input};
-
-pub fn margin<State: 'static, Action: 'static, V>(
-    inner: V,
-    margin: Padding,
-) -> impl WidgetView<State, Action> + use<State, Action, V>
-where
-    V: WidgetView<State, Action>,
-{
-    sized_box(inner).padding(margin)
-}
+use xilem::view::{TextInput, text_input};
 
 #[derive(Clone)]
 pub struct NumberInputState<N> {
