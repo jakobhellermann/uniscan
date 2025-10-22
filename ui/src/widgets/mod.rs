@@ -1,4 +1,5 @@
 pub mod number_input;
+pub mod progress_bar_integer;
 
 use xilem::WidgetView;
 use xilem::style::{Padding, Style};

@@ -7,7 +7,9 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
+use masonry::properties::BarColor;
 use masonry::properties::types::Length;
+use masonry::theme::default_property_set;
 use rabex::typetree::NullTypeTreeProvider;
 use rabex_env::Environment;
 use rabex_env::game_files::GameFiles;
@@ -15,17 +17,18 @@ use uniscan::{ScanResults, ScriptFilter, UniScan};
 use winit::error::EventLoopError;
 use xilem::core::one_of::OneOf2;
 use xilem::core::{NoElement, ViewSequence, fork};
-use xilem::style::{Background, Padding, Style};
+use xilem::style::{Background, BorderColor, BorderWidth, CornerRadius, Padding, Style};
 use xilem::tokio::sync::mpsc::UnboundedSender;
 use xilem::view::{
     CrossAxisAlignment, FlexExt, MainAxisAlignment, button, flex_col, flex_row, label, portal,
-    progress_bar, prose, sized_box, text_input, virtual_scroll, worker, worker_raw,
+    prose, sized_box, text_input, virtual_scroll, worker, worker_raw,
 };
 use xilem::{Color, EventLoop, ViewCtx, WidgetView, WindowOptions, Xilem};
 
 use widgets::margin;
 use widgets::number_input::{NumberInputState, number_input};
 
+use crate::widgets::progress_bar_integer::progress_bar;
 use crate::workers::{generic, rescan};
 
 pub const COLOR_ERROR: Color = Color::from_rgb8(255, 51, 51);
@@ -468,7 +471,26 @@ fn main() -> Result<(), EventLoopError> {
 
     app.set_error_with(|app| Ok(app.gameselect.steam_games = find_games()?));
 
-    let app = Xilem::new_simple(app, App::ui, WindowOptions::new("uniscan"));
+    let mut properties = default_property_set();
+
+    properties.insert::<widgets::progress_bar_integer::widget::ProgressBar, _>(CornerRadius {
+        radius: 5.,
+    });
+    properties.insert::<widgets::progress_bar_integer::widget::ProgressBar, _>(BorderWidth {
+        width: masonry::theme::BORDER_WIDTH,
+    });
+    properties.insert::<widgets::progress_bar_integer::widget::ProgressBar, _>(Background::Color(
+        masonry::theme::ZYNC_900,
+    ));
+    properties.insert::<widgets::progress_bar_integer::widget::ProgressBar, _>(BorderColor {
+        color: masonry::theme::ZYNC_800,
+    });
+    properties.insert::<widgets::progress_bar_integer::widget::ProgressBar, _>(BarColor(
+        masonry::theme::ACCENT_COLOR,
+    ));
+
+    let app = Xilem::new_simple(app, App::ui, WindowOptions::new("uniscan"))
+        .with_default_properties(properties);
     app.run_in(EventLoop::with_user_event())?;
     Ok(())
 }
