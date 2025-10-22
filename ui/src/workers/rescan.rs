@@ -1,4 +1,5 @@
 use crate::utils;
+use crate::widgets::progress_bar_integer::Progress;
 use anyhow::Result;
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
@@ -13,10 +14,7 @@ pub enum Response {
     ScanFinished(ScanResults),
     #[allow(dead_code)]
     Error(anyhow::Error),
-    ProgressUpdate {
-        total: usize,
-        current: usize,
-    },
+    ProgressUpdate(Progress),
 }
 
 pub enum Request {
@@ -53,10 +51,8 @@ pub async fn worker(
                 let res = tokio::task::spawn_blocking(move || {
                     tracing::info!("Start rescan");
 
-                    let _ = _proxy.message(Ok(Response::ProgressUpdate {
-                        total: 1,
-                        current: 0,
-                    }));
+                    let _ =
+                        _proxy.message(Ok(Response::ProgressUpdate(Progress::Text("Scanning"))));
 
                     let mut uniscan = uniscan.lock().unwrap_or_else(PoisonError::into_inner);
                     let Some(uniscan) = uniscan.as_mut() else {
@@ -64,6 +60,9 @@ pub async fn worker(
                     };
                     uniscan.query.set_query(&query)?;
                     utils::time("rescan", || {
+                        let _ = _proxy.message(Ok(Response::ProgressUpdate(Progress::Text(
+                            "Collecting files",
+                        ))));
                         let files = uniscan.collect_files()?;
                         let total = files.len();
 
@@ -75,10 +74,11 @@ pub async fn worker(
                                 return;
                             }
 
-                            let _ = _proxy.message(Ok(Response::ProgressUpdate {
-                                total,
-                                current: progress,
-                            }));
+                            let _ =
+                                _proxy.message(Ok(Response::ProgressUpdate(Progress::Progress {
+                                    current: progress,
+                                    max: total,
+                                })));
                         })
                     })
                 })

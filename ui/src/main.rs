@@ -28,7 +28,7 @@ use xilem::{Color, EventLoop, ViewCtx, WidgetView, WindowOptions, Xilem};
 use widgets::margin;
 use widgets::number_input::{NumberInputState, number_input};
 
-use crate::widgets::progress_bar_integer::progress_bar;
+use crate::widgets::progress_bar_integer::{Progress, progress_bar};
 use crate::workers::{generic, rescan};
 
 pub const COLOR_ERROR: Color = Color::from_rgb8(255, 51, 51);
@@ -77,7 +77,7 @@ struct App {
 
     // Shared
     error: Result<()>,
-    progress: Option<(usize, usize)>,
+    progress: Progress,
     sender_rescan: Option<UnboundedSender<rescan::Request>>,
     sender_generic: Option<UnboundedSender<generic::Request>>,
     uniscan: Arc<Mutex<Option<UniScan>>>,
@@ -102,7 +102,7 @@ impl Default for App {
             },
 
             error: Result::Ok(()),
-            progress: None,
+            progress: Progress::Done,
             sender_rescan: None,
             sender_generic: None,
             uniscan: Default::default(),
@@ -367,6 +367,7 @@ impl App {
                 sized_box(button("Back", App::go_to_gameselect)),
                 flex_row((self
                     .progress
+                    .unfinished()
                     .map(|progress| progress_bar(progress).flex(1.)),))
                 .flex(1.),
                 flex_row((
@@ -450,12 +451,8 @@ impl App {
                             state.main.results = Some(scan);
                         }
                         rescan::Response::Error(err) => state.set_error(err),
-                        rescan::Response::ProgressUpdate { total, current } => {
-                            if current != total {
-                                state.progress = Some((current, total));
-                            } else {
-                                state.progress = None;
-                            }
+                        rescan::Response::ProgressUpdate(progress) => {
+                            state.progress = progress;
                         }
                     },
                     Err(err) => state.set_error(err),

@@ -1,17 +1,32 @@
 use xilem::core::{MessageContext, MessageResult, Mut, View, ViewMarker};
 use xilem::{Pod, ViewCtx};
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Progress {
+    Text(&'static str),
+    Progress { current: usize, max: usize },
+    Done,
+}
+impl Progress {
+    pub fn unfinished(self) -> Option<Self> {
+        match self {
+            Progress::Done => None,
+            other => Some(other),
+        }
+    }
+}
+
 /// A view which displays a progress bar.
 ///
 /// This can be for showing progress of a task or a download.
-pub fn progress_bar(progress: (usize, usize)) -> ProgressBar {
+pub fn progress_bar(progress: Progress) -> ProgressBar {
     ProgressBar { progress }
 }
 
 /// The [`View`] created by [`progress_bar`].
 #[must_use = "View values do nothing unless provided to Xilem."]
 pub struct ProgressBar {
-    progress: (usize, usize),
+    progress: Progress,
 }
 
 impl ViewMarker for ProgressBar {}
@@ -63,6 +78,7 @@ impl<State, Action> View<State, Action, ViewCtx> for ProgressBar {
 pub mod widget {
 
     use std::any::TypeId;
+    use std::borrow::Cow;
 
     use masonry::accesskit::{Node, Role};
     use masonry::core::{NewWidget, Properties};
@@ -81,11 +97,13 @@ pub mod widget {
     };
     use masonry::widgets::Label;
 
+    use super::Progress;
+
     // TODO - NaN probably shouldn't be a meaningful value in our API.
 
     /// A progress bar.
     pub struct ProgressBar {
-        progress: (usize, usize),
+        progress: Progress,
         label: WidgetPod<Label>,
     }
 
@@ -95,8 +113,7 @@ pub mod widget {
         /// The progress value will be clamped to [0, 1].
         ///
         /// A `None` value (or NaN) will show an indeterminate progress bar.
-        pub fn new(progress: (usize, usize)) -> Self {
-            let progress = clamp_progress(progress);
+        pub fn new(progress: Progress) -> Self {
             let label_props = Properties::one(LineBreaking::Overflow);
             let label =
                 NewWidget::new_with_props(Label::new(Self::value(progress)), label_props).to_pod();
@@ -104,19 +121,26 @@ pub mod widget {
         }
 
         fn value_accessibility(&self) -> Box<str> {
-            format!("{}/{}", self.progress.0, self.progress.1).into()
+            Self::value_inner(self.progress).into()
         }
 
-        fn value(progress: (usize, usize)) -> ArcStr {
-            format!("{}/{}", progress.0, progress.1).into()
+        fn value(progress: Progress) -> ArcStr {
+            Self::value_inner(progress).into()
+        }
+
+        fn value_inner(progress: Progress) -> Cow<'static, str> {
+            match progress {
+                Progress::Text(text) => text.into(),
+                Progress::Progress { current, max } => format!("{current}/{max}").into(),
+                Progress::Done => "".into(),
+            }
         }
     }
 
     // --- MARK: WIDGETMUT
     impl ProgressBar {
         /// Set the progress displayed by the bar.
-        pub fn set_progress(this: &mut WidgetMut<'_, Self>, progress: (usize, usize)) {
-            let progress = clamp_progress(progress);
+        pub fn set_progress(this: &mut WidgetMut<'_, Self>, progress: Progress) {
             let progress_changed = this.widget.progress != progress;
             if progress_changed {
                 this.widget.progress = progress;
@@ -125,15 +149,6 @@ pub mod widget {
             }
             this.ctx.request_layout();
             this.ctx.request_render();
-        }
-    }
-
-    /// Helper to ensure progress is either a number between [0, 1] inclusive, or `None`.
-    fn clamp_progress(progress: (usize, usize)) -> (usize, usize) {
-        if progress.0 > progress.1 {
-            (progress.1, progress.1)
-        } else {
-            (progress.0, progress.1)
         }
     }
 
@@ -195,7 +210,14 @@ pub mod widget {
             let bg_rect = border_width.bg_rect(ctx.size(), border_radius);
             let border_rect = border_width.border_rect(ctx.size(), border_radius);
 
-            let progress_percentage = self.progress.0 as f64 / self.progress.1 as f64;
+            let progress_percentage = match self.progress {
+                Progress::Text(_) => 0.0,
+                Progress::Progress { current, max } => {
+                    (current as f64 / max as f64).clamp(0.0, 1.0)
+                }
+                Progress::Done => 1.0,
+            };
+
             let progress_rect_size =
                 Size::new(ctx.size().width * progress_percentage, ctx.size().height);
             let progress_rect = border_width.bg_rect(progress_rect_size, border_radius);
@@ -217,8 +239,18 @@ pub mod widget {
             _props: &PropertiesRef<'_>,
             node: &mut Node,
         ) {
-            node.set_max_numeric_value(self.progress.1 as f64);
-            node.set_numeric_value(self.progress.0 as f64);
+            match self.progress {
+                Progress::Text(_) => {
+                    node.clear_max_numeric_value();
+                }
+                Progress::Progress { current, max } => {
+                    node.set_max_numeric_value(max as f64);
+                    node.set_numeric_value(current as f64);
+                }
+                Progress::Done => {
+                    node.clear_max_numeric_value();
+                }
+            }
         }
 
         fn children_ids(&self) -> ChildrenIds {
