@@ -77,7 +77,7 @@ struct App {
 
     // Shared
     error: Result<()>,
-    progress: Option<f64>,
+    progress: Option<(usize, usize)>,
     sender_rescan: Option<UnboundedSender<rescan::Request>>,
     sender_generic: Option<UnboundedSender<generic::Request>>,
     uniscan: Arc<Mutex<Option<UniScan>>>,
@@ -367,7 +367,7 @@ impl App {
                 sized_box(button("Back", App::go_to_gameselect)),
                 flex_row((self
                     .progress
-                    .map(|progress| progress_bar(Some(progress)).flex(1.)),))
+                    .map(|progress| progress_bar(progress).flex(1.)),))
                 .flex(1.),
                 flex_row((
                     label("Limit:"),
@@ -452,8 +452,7 @@ impl App {
                         rescan::Response::Error(err) => state.set_error(err),
                         rescan::Response::ProgressUpdate { total, current } => {
                             if current != total {
-                                let progress = (current as f64) / (total as f64);
-                                state.progress = Some((progress * 100.).trunc() / 100.)
+                                state.progress = Some((current, total));
                             } else {
                                 state.progress = None;
                             }

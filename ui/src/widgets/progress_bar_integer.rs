@@ -4,14 +4,14 @@ use xilem::{Pod, ViewCtx};
 /// A view which displays a progress bar.
 ///
 /// This can be for showing progress of a task or a download.
-pub fn progress_bar(progress: Option<f64>) -> ProgressBar {
+pub fn progress_bar(progress: (usize, usize)) -> ProgressBar {
     ProgressBar { progress }
 }
 
 /// The [`View`] created by [`progress_bar`].
 #[must_use = "View values do nothing unless provided to Xilem."]
 pub struct ProgressBar {
-    progress: Option<f64>,
+    progress: (usize, usize),
 }
 
 impl ViewMarker for ProgressBar {}
@@ -85,11 +85,7 @@ pub mod widget {
 
     /// A progress bar.
     pub struct ProgressBar {
-        /// A value in the range `[0, 1]` inclusive, where 0 is 0% and 1 is 100% complete.
-        ///
-        /// `None` variant can be used to show a progress bar without a percentage.
-        /// It is also used if an invalid float (outside of [0, 1]) is passed.
-        progress: Option<f64>,
+        progress: (usize, usize),
         label: WidgetPod<Label>,
     }
 
@@ -99,7 +95,7 @@ pub mod widget {
         /// The progress value will be clamped to [0, 1].
         ///
         /// A `None` value (or NaN) will show an indeterminate progress bar.
-        pub fn new(progress: Option<f64>) -> Self {
+        pub fn new(progress: (usize, usize)) -> Self {
             let progress = clamp_progress(progress);
             let label_props = Properties::one(LineBreaking::Overflow);
             let label =
@@ -108,30 +104,18 @@ pub mod widget {
         }
 
         fn value_accessibility(&self) -> Box<str> {
-            if let Some(value) = self.progress {
-                format!("{:.0}%", value * 100.).into()
-            } else {
-                "progress unspecified".into()
-            }
+            format!("{}/{}", self.progress.0, self.progress.1).into()
         }
 
-        fn value(progress: Option<f64>) -> ArcStr {
-            if let Some(value) = progress {
-                format!("{:.0}%", value * 100.).into()
-            } else {
-                "".into()
-            }
+        fn value(progress: (usize, usize)) -> ArcStr {
+            format!("{}/{}", progress.0, progress.1).into()
         }
     }
 
     // --- MARK: WIDGETMUT
     impl ProgressBar {
         /// Set the progress displayed by the bar.
-        ///
-        /// The progress value will be clamped to [0, 1].
-        ///
-        /// A `None` value (or NaN) will show an indeterminate progress bar.
-        pub fn set_progress(this: &mut WidgetMut<'_, Self>, progress: Option<f64>) {
+        pub fn set_progress(this: &mut WidgetMut<'_, Self>, progress: (usize, usize)) {
             let progress = clamp_progress(progress);
             let progress_changed = this.widget.progress != progress;
             if progress_changed {
@@ -145,14 +129,11 @@ pub mod widget {
     }
 
     /// Helper to ensure progress is either a number between [0, 1] inclusive, or `None`.
-    ///
-    /// NaNs are converted to `None`.
-    fn clamp_progress(progress: Option<f64>) -> Option<f64> {
-        let progress = progress?;
-        if progress.is_nan() {
-            None
+    fn clamp_progress(progress: (usize, usize)) -> (usize, usize) {
+        if progress.0 > progress.1 {
+            (progress.1, progress.1)
         } else {
-            Some(progress.clamp(0., 1.))
+            (progress.0, progress.1)
         }
     }
 
@@ -214,10 +195,9 @@ pub mod widget {
             let bg_rect = border_width.bg_rect(ctx.size(), border_radius);
             let border_rect = border_width.border_rect(ctx.size(), border_radius);
 
-            let progress_rect_size = Size::new(
-                ctx.size().width * self.progress.unwrap_or(1.),
-                ctx.size().height,
-            );
+            let progress_percentage = self.progress.0 as f64 / self.progress.1 as f64;
+            let progress_rect_size =
+                Size::new(ctx.size().width * progress_percentage, ctx.size().height);
             let progress_rect = border_width.bg_rect(progress_rect_size, border_radius);
 
             let brush = bg.get_peniko_brush_for_rect(bg_rect.rect());
@@ -237,11 +217,8 @@ pub mod widget {
             _props: &PropertiesRef<'_>,
             node: &mut Node,
         ) {
-            node.set_min_numeric_value(0.0);
-            node.set_max_numeric_value(1.0);
-            if let Some(value) = self.progress {
-                node.set_numeric_value(value);
-            }
+            node.set_max_numeric_value(self.progress.1 as f64);
+            node.set_numeric_value(self.progress.0 as f64);
         }
 
         fn children_ids(&self) -> ChildrenIds {
