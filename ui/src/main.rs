@@ -423,7 +423,10 @@ impl App {
         (
             worker(
                 workers::generic::worker,
-                |state: &mut App, sender| state.sender_generic = Some(sender),
+                |state: &mut App, sender| {
+                    state.sender_generic = Some(sender);
+                    auto_select(state);
+                },
                 |state: &mut App, res: Result<generic::Response>| match res {
                     Ok(res) => match res {
                         generic::Response::Noop => {}
@@ -470,6 +473,20 @@ impl App {
             ),
         )
     }
+}
+
+const AUTOSELECT_GAME: Option<&'static str> = None;
+fn auto_select(state: &mut App) {
+    let Some(game) = AUTOSELECT_GAME else {
+        return;
+    };
+    let index = state
+        .gameselect
+        .steam_games
+        .iter()
+        .position(|x| (&x.game.name).to_lowercase().contains(game))
+        .unwrap();
+    state.go_to_main(SelectedGame::Steam(index));
 }
 
 fn main() -> Result<(), EventLoopError> {
