@@ -4,6 +4,7 @@ mod widgets;
 mod workers;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::Result;
@@ -81,6 +82,7 @@ struct App {
     sender_rescan: Option<UnboundedSender<rescan::Request>>,
     sender_generic: Option<UnboundedSender<generic::Request>>,
     uniscan: Arc<Mutex<Option<UniScan>>>,
+    uniscan_cancel: Arc<AtomicBool>,
 }
 
 impl Default for App {
@@ -106,6 +108,7 @@ impl Default for App {
             sender_rescan: None,
             sender_generic: None,
             uniscan: Default::default(),
+            uniscan_cancel: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -128,6 +131,8 @@ impl App {
         ));
     }
     fn go_to_gameselect(&mut self) {
+        self.cancel_scan();
+
         self.view = View::GameSelect;
 
         self.main.results = None;
@@ -188,6 +193,11 @@ impl App {
             self.reload();
         }
     }
+
+    fn cancel_scan(&self) {
+        self.uniscan_cancel.store(true, Ordering::Release);
+    }
+
     fn reload(&self) {
         utils::time("send rescan", || {
             let query = match self.main.query_raw.as_str() {
@@ -431,8 +441,9 @@ impl App {
                                 state.set_script_filter(stats.most_used_script);
                             }
                         }
-                        generic::Response::Loaded(uni_scan) => {
-                            *state.uniscan.lock().unwrap() = Some(uni_scan);
+                        generic::Response::Loaded(uniscan) => {
+                            state.uniscan_cancel = Arc::clone(&uniscan.cancel);
+                            *state.uniscan.lock().unwrap() = Some(uniscan);
                         }
                         generic::Response::Progress(progress) => state.progress = progress,
                     },

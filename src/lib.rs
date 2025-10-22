@@ -16,9 +16,10 @@ use rabex_env::{EnvResolver as _, Environment};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 pub struct UniScan {
+    pub cancel: Arc<AtomicBool>,
     pub env: Arc<Environment>,
     pub scene_names: Vec<String>,
     pub query: QueryRunner,
@@ -84,6 +85,7 @@ impl UniScan {
             env,
             scene_names,
             query,
+            cancel: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -118,6 +120,11 @@ impl UniScan {
         let len = files.len();
 
         let items = par_fold_reduce::<Vec<_>, _>(files, |acc, path| {
+            if self.cancel.load(Ordering::Acquire) {
+                tracing::debug!("Cancelled scan");
+                return Ok(());
+            }
+
             let path_str = path.to_str().unwrap();
 
             let progress = file_progress.fetch_add(1, Ordering::Relaxed) + 1;
