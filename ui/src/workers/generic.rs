@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use anyhow::Result;
-use rabex_env::EnvResolver;
+use rabex_env::resolver::EnvResolver as _;
 use rabex_env::unity::types::MonoBehaviour;
 use tracing::warn;
 use uniscan::UniScan;
@@ -69,7 +69,7 @@ pub async fn worker(proxy: MessageProxy<Result<Response>>, mut rx: UnboundedRece
                     emit_progress("Reading game files");
 
                     let result = rabex_env::utils::par_fold_reduce::<HashMap<String, usize>, _>(
-                        env.resolver.serialized_files()?,
+                        env.game_files.serialized_files()?,
                         move |scripts, path| {
                             let file = env.load_cached(path)?;
                             for mb in file.objects_of::<MonoBehaviour>() {
