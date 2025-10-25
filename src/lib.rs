@@ -7,13 +7,14 @@ use query::QueryRunner;
 use anyhow::{Context, Result, anyhow};
 use rabex::tpk::TpkTypeTreeBlob;
 use rabex::typetree::typetree_cache::sync::TypeTreeCache;
+use rabex_env::Environment;
 use rabex_env::addressables::ArchivePath;
 use rabex_env::game_files::GameFiles;
 use rabex_env::handle::{ObjectRefHandle, SerializedFileHandle};
+use rabex_env::resolver::EnvResolver as _;
 use rabex_env::typetree_generator_api::GeneratorBackend;
 use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::utils::par_fold_reduce;
-use rabex_env::{EnvResolver as _, Environment};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::Arc;
@@ -91,7 +92,7 @@ impl UniScan {
     }
 
     pub fn collect_files(&self) -> Result<Vec<PathBuf>, anyhow::Error> {
-        let mut files = self.env.resolver.serialized_files()?;
+        let mut files = self.env.game_files.serialized_files()?;
         if let Some(aa) = self.env.addressables()? {
             files.extend(
                 aa.cab_to_bundle

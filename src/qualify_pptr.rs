@@ -6,7 +6,7 @@ use rabex::objects::PPtr;
 use rabex::objects::pptr::{FileId, PathId};
 use rabex::typetree::TypeTreeProvider;
 use rabex_env::handle::SerializedFileHandle;
-use rabex_env::resolver::BasedirEnvResolver;
+use rabex_env::resolver::EnvResolver;
 
 #[derive(serde_derive::Deserialize)]
 pub struct QualifiedPPtr {
@@ -14,7 +14,7 @@ pub struct QualifiedPPtr {
     pub path_id: PathId,
 }
 
-pub fn qualify_pptrs<R: BasedirEnvResolver, P: TypeTreeProvider>(
+pub fn qualify_pptrs<R: EnvResolver, P: TypeTreeProvider>(
     file_path: &str,
     file: &SerializedFileHandle<'_, R, P>,
     value: &mut jaq_json::Val,

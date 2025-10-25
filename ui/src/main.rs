@@ -551,6 +551,6 @@ fn unity_game_from_path(path: &Path) -> Result<UnityGame> {
 
     Ok(UnityGame {
         name,
-        path: env.resolver.game_dir,
+        path: env.game_files.game_dir,
     })
 }
