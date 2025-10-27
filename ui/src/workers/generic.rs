@@ -54,7 +54,7 @@ pub async fn worker(proxy: MessageProxy<Result<Response>>, mut rx: UnboundedRece
                 .map(Response::OpenAnotherGame),
             Request::LoadGame(path) => {
                 let _proxy = proxy.clone();
-                if let Err(e) = tokio::task::spawn_blocking(move || -> Result<_> {
+                let task = tokio::task::spawn_blocking(move || -> Result<_> {
                     let emit_progress = |msg| {
                         _proxy
                             .message(Ok(Response::Progress(Progress::Text(msg))))
@@ -94,8 +94,9 @@ pub async fn worker(proxy: MessageProxy<Result<Response>>, mut rx: UnboundedRece
 
                     Ok(())
                 })
-                .await
-                {
+                .await;
+                let error = task.map_err(anyhow::Error::from).flatten();
+                if let Err(e) = error {
                     proxy.message(Err(e.into())).log_error();
                 }
                 continue;
