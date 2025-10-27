@@ -151,6 +151,7 @@ impl App {
         self.error = Ok(());
     }
     fn set_error(&mut self, err: anyhow::Error) {
+        self.progress = Progress::Done;
         self.error = Err(err);
     }
     fn set_error_with<T>(&mut self, f: impl Fn(&mut App) -> Result<T>) {
@@ -408,7 +409,7 @@ impl App {
             .as_ref()
             .err()
             .map(|e| {
-                prose(format!("{:#?}", e))
+                prose(format!("{:?}", e))
                     .line_break_mode(masonry::properties::LineBreaking::WordWrap)
                     .text_color(COLOR_ERROR)
                     .boxed()

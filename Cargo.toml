@@ -56,3 +56,6 @@ opt-level = 2
 jaq-core = { git = "https://github.com/jakobhellermann/jaq", branch = "dev" }
 jaq-std = { git = "https://github.com/jakobhellermann/jaq", branch = "dev" }
 jaq-json = { git = "https://github.com/jakobhellermann/jaq", branch = "dev" }
+
+# [patch."https://github.com/jakobhellermann/rabex-env"]
+# rabex-env = { path = "../rabex-env" }
