@@ -1,0 +1,18 @@
+[package]
+name = "uniscan-gpui"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rabex-env.workspace = true
+rabex.workspace = true
+uniscan = { path = ".." }
+anyhow = "1.0.100"
+tracing = { version = "0.1.41", default-features = false }
+steamlocate = "2.0.1"
+gpui-component = "0.3.1"
+gpui = "0.2.2"
+
+[lints]
+workspace = true
