@@ -13,6 +13,9 @@ tracing = { version = "0.1.41", default-features = false }
 steamlocate = "2.0.1"
 gpui-component = "0.3.1"
 gpui = "0.2.2"
+tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
+tokio = "1.48.0"
+smol = "2.0.2"
 
 [lints]
 workspace = true

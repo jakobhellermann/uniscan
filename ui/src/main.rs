@@ -493,7 +493,9 @@ fn auto_select(state: &mut App) {
 fn main() -> Result<(), EventLoopError> {
     let mut app = App::default();
 
-    app.set_error_with(|app| Ok(app.gameselect.steam_games = find_games()?));
+    app.set_error_with(
+        |app| Ok(app.gameselect.steam_games = utils::time("find", || find_games())?),
+    );
 
     let mut properties = default_property_set();
 

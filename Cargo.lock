@@ -7609,8 +7609,11 @@ dependencies = [
  "gpui-component",
  "rabex",
  "rabex-env",
+ "smol",
  "steamlocate",
+ "tokio",
  "tracing",
+ "tracing-subscriber",
  "uniscan",
 ]
 

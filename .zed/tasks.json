@@ -1,5 +1,11 @@
 [
   {
+    "label": "GPUI",
+    "command": "cargo run -p uniscan-gpui",
+    "reveal": "no_focus"
+  },
+
+  {
     "label": "UI (Debug)",
     "command": "cargo run -p uniscan-ui",
     "env": {
