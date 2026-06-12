@@ -9,10 +9,8 @@ use rabex::tpk::TpkTypeTreeBlob;
 use rabex::typetree::typetree_cache::sync::TypeTreeCache;
 use rabex_env::Environment;
 use rabex_env::addressables::ArchivePath;
-use rabex_env::game_files::GameFiles;
 use rabex_env::handle::{ObjectRefHandle, SerializedFileHandle};
-use rabex_env::resolver::EnvResolver as _;
-use rabex_env::typetree_generator_api::GeneratorBackend;
+use rabex_env::resolver::{EnvResolver as _, GameFiles};
 use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::utils::par_fold_reduce;
 use std::path::{Path, PathBuf};
@@ -65,13 +63,8 @@ impl UniScan {
         let game_files = GameFiles::probe(game_dir)?;
 
         let tpk = TypeTreeCache::new(TpkTypeTreeBlob::embedded());
-        let mut env = Environment::new(game_files, tpk);
+        let env = Environment::new(game_files, tpk);
 
-        time("load_typetree_generator", || {
-            if let Err(e) = env.load_typetree_generator(GeneratorBackend::default()) {
-                tracing::warn!("{e}");
-            }
-        });
         let env = Arc::new(env);
         QueryRunner::set_env(Arc::clone(&env));
 
@@ -192,7 +185,7 @@ impl UniScan {
     ) -> Result<()> {
         let file = self
             .env
-            .load_cached(path)
+            .load_serialized(path)
             .with_context(|| format!("Could not load '{path}'"))?;
 
         for mb in file.objects_of::<MonoBehaviour>() {

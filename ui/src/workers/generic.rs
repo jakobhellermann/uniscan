@@ -71,7 +71,7 @@ pub async fn worker(proxy: MessageProxy<Result<Response>>, mut rx: UnboundedRece
                     let result = rabex_env::utils::par_fold_reduce::<HashMap<String, usize>, _>(
                         env.game_files.serialized_files()?,
                         move |scripts, path| {
-                            let file = env.load_cached(path)?;
+                            let file = env.load_serialized(path)?;
                             for mb in file.objects_of::<MonoBehaviour>() {
                                 let Some(script) = mb.mono_script()? else {
                                     continue;

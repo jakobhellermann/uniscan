@@ -13,7 +13,7 @@ use masonry::properties::types::Length;
 use masonry::theme::default_property_set;
 use rabex::typetree::NullTypeTreeProvider;
 use rabex_env::Environment;
-use rabex_env::game_files::GameFiles;
+use rabex_env::resolver::GameFiles;
 use uniscan::{ScanResults, ScriptFilter, UniScan};
 use winit::error::EventLoopError;
 use xilem::core::one_of::OneOf2;

@@ -18,7 +18,7 @@ fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
         serde_json::Value::try_from(&pptr).map_err(|e| anyhow::anyhow!("{e}"))?,
     )?;
 
-    let file = env.load_cached(&qualified_pptr.file).unwrap();
+    let file = env.load_serialized(&qualified_pptr.file).unwrap();
     let pptr = PPtr::local(qualified_pptr.path_id).typed::<jaq_json::Val>();
     let object = file.deref(pptr)?;
     let mut value = object.read().map_err(|e| {
