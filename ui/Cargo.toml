@@ -23,10 +23,7 @@ anyhow = "1.0"
 tracing = "0.1"
 mimalloc = "0.1"
 opener = "0.8"
-rfd = { version = "0.15", default-features = false, features = [
-    "xdg-portal",
-    "tokio",
-] }
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"] }
 steamlocate = "2.0"
 
 [lints]
