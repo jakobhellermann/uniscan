@@ -4,7 +4,11 @@ use xilem::{Pod, ViewCtx};
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Progress {
     Text(&'static str),
-    Progress { current: usize, max: usize },
+    #[allow(clippy::enum_variant_names)]
+    Progress {
+        current: usize,
+        max: usize,
+    },
     Done,
 }
 impl Progress {

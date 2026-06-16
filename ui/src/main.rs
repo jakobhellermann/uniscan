@@ -485,7 +485,7 @@ fn auto_select(state: &mut App) {
         .gameselect
         .steam_games
         .iter()
-        .position(|x| (&x.game.name).to_lowercase().contains(game))
+        .position(|x| x.game.name.to_lowercase().contains(game))
         .unwrap();
     state.go_to_main(SelectedGame::Steam(index));
 }

@@ -97,7 +97,7 @@ pub async fn worker(proxy: MessageProxy<Result<Response>>, mut rx: UnboundedRece
                 .await;
                 let error = task.map_err(anyhow::Error::from).flatten();
                 if let Err(e) = error {
-                    proxy.message(Err(e.into())).log_error();
+                    proxy.message(Err(e)).log_error();
                 }
                 continue;
             }

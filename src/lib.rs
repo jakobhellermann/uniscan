@@ -124,7 +124,7 @@ impl UniScan {
             let path_str = format_path(&path);
 
             let progress = file_progress.fetch_add(1, Ordering::Relaxed) + 1;
-            if progress % 100 == 0 {
+            if progress.is_multiple_of(100) {
                 emit_progress(progress);
             }
 
