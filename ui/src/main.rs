@@ -491,6 +491,26 @@ fn auto_select(state: &mut App) {
 }
 
 fn main() -> Result<(), EventLoopError> {
+    {
+        use tracing_subscriber::EnvFilter;
+        use tracing_subscriber::fmt::format::FmtSpan;
+        // Span durations via `close` events. The masonry/winit/gpu render stack is muted by
+        // default so scan/typetree timings aren't drowned out; override with `RUST_LOG`, e.g.
+        // `RUST_LOG=info,rabex_env=trace,unity_typetree_gen=trace,dotnetdll=trace`.
+        const DEFAULT: &str = "info,\
+            masonry=warn,masonry_core=warn,masonry_winit=warn,\
+            winit=warn,vello=warn,wgpu=warn,wgpu_core=warn,wgpu_hal=warn,naga=warn,\
+            cosmic_text=warn,skrifa=warn,swash=warn";
+        tracing_subscriber::fmt()
+            .with_target(true)
+            .with_env_filter(
+                EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(DEFAULT)),
+            )
+            .with_span_events(FmtSpan::CLOSE)
+            .with_writer(std::io::stderr)
+            .init();
+    }
+
     let mut app = App::default();
 
     app.set_error_with(|app| Ok(app.gameselect.steam_games = find_games()?));

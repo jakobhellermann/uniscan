@@ -20,7 +20,14 @@ use rabex_env::utils::par_fold_reduce;
 use jaq_json::Rc;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
+use std::time::{Duration, Instant};
+
+/// CPU-summed time (across scan threads) spent in the two scan phases, reset per scan.
+/// Logged at `info` after each scan to show whether time goes into loading serialized
+/// files/bundles or into iterating objects + resolving their MonoScript.
+static LOAD_NS: AtomicU64 = AtomicU64::new(0);
+static ITER_NS: AtomicU64 = AtomicU64::new(0);
 
 pub struct UniScan {
     pub cancel: Arc<AtomicBool>,
@@ -189,6 +196,12 @@ impl UniScan {
             Ok(())
         })?;
         emit_progress(len);
+        tracing::info!(
+            files = len,
+            load_serialized = ?Duration::from_nanos(LOAD_NS.swap(0, Ordering::Relaxed)),
+            iterate_mono_script = ?Duration::from_nanos(ITER_NS.swap(0, Ordering::Relaxed)),
+            "scan phases (CPU-summed across threads)"
+        );
 
         Ok(ScanResults {
             items,
@@ -207,11 +220,14 @@ impl UniScan {
             ObjectRefHandle<MonoBehaviour>,
         ) -> Result<()>,
     ) -> Result<()> {
+        let _t_load = Instant::now();
         let file = self
             .env
             .load_serialized(path)
             .with_context(|| format!("Could not load '{path}'"))?;
+        LOAD_NS.fetch_add(_t_load.elapsed().as_nanos() as u64, Ordering::Relaxed);
 
+        let _t_iter = Instant::now();
         for mb in file.objects_of::<MonoBehaviour>() {
             let Some(script) = mb.mono_script()? else {
                 continue;
@@ -221,6 +237,7 @@ impl UniScan {
                 emit(&file, &script, mb)?;
             }
         }
+        ITER_NS.fetch_add(_t_iter.elapsed().as_nanos() as u64, Ordering::Relaxed);
 
         Ok(())
     }

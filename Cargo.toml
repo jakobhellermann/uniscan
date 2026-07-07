@@ -9,7 +9,8 @@ mimalloc = "0.1"
 anyhow = "1.0"
 rabex.workspace = true
 rayon = "1.11"
-tracing = "0.1"
+tracing = { version = "0.1", features = ["release_max_level_info"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rabex-env.workspace = true
 
 jaq-core = "3.1"
@@ -31,7 +32,7 @@ members = [".", "ui"]
 default-members = ["ui"]
 
 [workspace.dependencies]
-rabex-env = { git = "https://github.com/jakobhellermann/rabex-env" }
+rabex-env = { git = "https://github.com/jakobhellermann/rabex-env", features = ["tracing-instrument"] }
 rabex = { version = "0.2", default-features = false, features = [
   "embed-tpk",
   # "serde_path_to_error", nicer errors for debugging, at a 2x speed cost
@@ -47,5 +48,7 @@ lto = "thin"
 [profile.dev.package."*"]
 opt-level = 2
 
-# [patch."https://github.com/jakobhellermann/rabex-env"]
-# rabex-env = { path = "../rabex-env" }
+# Until https://github.com/nickbclifford/dotnetdll/pull/6 is merged: the upstream
+# `#[tracing::instrument]` captures every arg by Debug, which floods when tracing is enabled.
+[patch.crates-io]
+dotnetdll = { git = "https://github.com/jakobhellermann/dotnetdll", branch = "instrument-skip" }

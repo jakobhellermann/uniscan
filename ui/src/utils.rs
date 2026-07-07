@@ -7,6 +7,7 @@ pub fn time<T>(name: &'static str, f: impl FnOnce() -> T) -> T {
     let res = f();
     if start.elapsed() > MIN_LOG_DURATION {
         info!("{name}: {:?}", start.elapsed());
+        println!("{name}: {:?}", start.elapsed());
     }
     res
 }
