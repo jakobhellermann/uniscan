@@ -1,20 +1,35 @@
-use anyhow::{Result, anyhow};
-use jaq_core::{DataT, Filter, Lut, Vars, data, load, unwrap_valr};
+use anyhow::{Context as _, Result, anyhow};
+use core::marker::PhantomData;
+use jaq_core::{Cv, DataT, Filter, Lut, Vars, ValXs, data, load, unwrap_valr};
 use jaq_json::Val;
 use jaq_std::input::{self, Inputs};
 use rabex::objects::PPtr;
+use rabex::tpk::TpkTypeTreeBlob;
+use rabex::typetree::TypeTreeProvider;
+use rabex::typetree::typetree_cache::sync::TypeTreeCache;
 use rabex_env::Environment;
-use std::sync::{Arc, RwLock};
+use rabex_env::resolver::{EnvResolver, GameFiles};
 
 use crate::qualify_pptr::{QualifiedPPtr, qualify_pptrs};
 
-fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
-    let env = ENV.read().unwrap();
-    let env = env.as_ref().unwrap();
+/// Capability trait giving a jaq run's context access to the [`Environment`], so the native
+/// `deref` filter can resolve PPtrs without a process-global. Mirrors how jaq-core exposes the
+/// `Lut` via `HasLut` and jaq-std the inputs via `HasInputs`: the env is threaded through the
+/// filter's `Ctx` (`DataT::Data`), never captured — a `Native` is a bare `fn` pointer and cannot
+/// close over anything.
+pub trait HasEnv<'a, R, P> {
+    fn env(&self) -> &'a Environment<R, P>;
+}
 
+fn deref<R: EnvResolver, P: TypeTreeProvider>(
+    env: &Environment<R, P>,
+    pptr: jaq_json::Val,
+) -> Result<jaq_json::Val> {
     let qualified_pptr = QualifiedPPtr::from_val(&pptr)?;
 
-    let file = env.load_serialized(&qualified_pptr.file).unwrap();
+    let file = env
+        .load_serialized(&qualified_pptr.file)
+        .with_context(|| format!("Failed to load '{}'", qualified_pptr.file))?;
     let pptr = PPtr::local(qualified_pptr.path_id).typed::<jaq_json::Val>();
     let object = file.deref(pptr)?;
     let mut value = object.read().map_err(|e| {
@@ -38,35 +53,45 @@ fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
     Ok(value)
 }
 
-fn funs<D: for<'a> DataT<V<'a> = jaq_json::Val>>()
--> impl Iterator<Item = jaq_core::native::Fun<D>> {
+// The native `deref` filter. Pulling the body into a generic fn with a *named* `'a` (rather than
+// inlining it in the closure) is what makes `ctx.data().env()` unambiguous — exactly how jaq-std's
+// `inputs` filter reaches its `HasInputs` data. The closure below is captureless, so it coerces to
+// the bare `fn` pointer `Native` requires.
+fn deref_native<'a, R, P>(cv: Cv<'a, DataKind<R, P>>) -> ValXs<'a, Val>
+where
+    R: EnvResolver + 'static,
+    P: TypeTreeProvider + 'static,
+{
+    let (ctx, val) = cv;
+    // The env comes from the run's context (see `HasEnv`), not a global.
+    let env = ctx.data().env();
+    let obj = deref(env, val).map_err(|e| {
+        jaq_core::Exn::from(jaq_core::Error::str(format!("Cannot call `deref`: {e}")))
+    });
+    Box::new(core::iter::once(obj))
+}
+
+fn funs<R, P>() -> impl Iterator<Item = jaq_core::native::Fun<DataKind<R, P>>>
+where
+    R: EnvResolver + 'static,
+    P: TypeTreeProvider + 'static,
+{
     [(
         "deref",
         vec![].into_boxed_slice(),
-        jaq_core::Native::new(|(_, val)| {
-            let obj = match deref(val) {
-                Ok(val) => Ok(val),
-                Err(e) => Err(jaq_core::Exn::from(jaq_core::Error::str(format!(
-                    "Cannot call `deref`: {}",
-                    e
-                )))),
-            };
-
-            Box::new(vec![obj].into_iter())
-        }),
+        jaq_core::Native::new(|cv| deref_native::<R, P>(cv)),
     )]
     .into_iter()
 }
-pub struct QueryRunner {
-    filter: Filter<DataKind>,
+pub struct QueryRunner<R = GameFiles, P = TypeTreeCache<TpkTypeTreeBlob>>
+where
+    R: 'static,
+    P: 'static,
+{
+    filter: Filter<DataKind<R, P>>,
 }
 
-impl QueryRunner {
-    pub fn set_env(env: Arc<Environment>) {
-        let env = Some(env);
-        *ENV.write().unwrap() = env;
-    }
-
+impl<R: EnvResolver + 'static, P: TypeTreeProvider + 'static> QueryRunner<R, P> {
     pub fn set_query(&mut self, query: &str) -> Result<()> {
         *self = QueryRunner::new(query)?;
         Ok(())
@@ -128,7 +153,7 @@ impl QueryRunner {
                 jaq_core::funs()
                     .chain(jaq_std::funs())
                     .chain(jaq_json::funs())
-                    .chain(funs()),
+                    .chain(funs::<R, P>()),
             )
             .with_global_vars(["$scene_path"])
             .compile(modules)
@@ -146,14 +171,14 @@ impl QueryRunner {
         Ok(QueryRunner { filter })
     }
 
-    pub fn exec(&self, item: jaq_json::Val) -> Result<Vec<jaq_json::Val>> {
+    pub fn exec(&self, env: &Environment<R, P>, item: jaq_json::Val) -> Result<Vec<jaq_json::Val>> {
         let inputs = jaq_std::input::RcIter::new(core::iter::empty());
         let data = Data {
             lut: &self.filter.lut,
             inputs: &inputs,
+            env,
         };
-        let out = self.filter.id.run::<DataKind>((
-            // jaq_core::Ctx::new([jaq_json::Val::Str(Rc::new("hi".into()))], &inputs),
+        let out = self.filter.id.run::<DataKind<R, P>>((
             jaq_core::Ctx::new(&data, Vars::new([jaq_json::Val::utf8_str("hi")])),
             item,
         ));
@@ -162,8 +187,6 @@ impl QueryRunner {
         unwrap_valr(res).map_err(|e| anyhow!("{}", e))
     }
 }
-
-static ENV: RwLock<Option<Arc<Environment>>> = RwLock::new(None);
 
 #[cfg(test)]
 mod tests {
@@ -175,11 +198,20 @@ mod tests {
         jaq_json::read::parse_single(s.as_bytes()).unwrap()
     }
 
-    /// Run `query` over the JSON `input` and return the matches. Only covers env-free queries —
-    /// the `deref`-based `defs.jq` filters need a live `ENV`.
+    /// Run `query` over the JSON `input` and return the matches. Only covers env-free queries; the
+    /// `deref`-based `defs.jq` filters need a populated env (see `deref_reads_through_a_qualified_pptr`).
+    /// The empty in-memory env is enough because these queries never resolve a PPtr.
     fn run(query: &str, input: &str) -> Vec<Val> {
+        use rabex_env::Environment;
+        use rabex_env::resolver::MemResolver;
+
+        let tpk = rabex::typetree::typetree_cache::sync::TypeTreeCache::new(
+            rabex::tpk::TpkTypeTreeBlob::embedded(),
+        );
+        let env = Environment::new(MemResolver::new(), tpk);
+
         let runner = QueryRunner::new(query).unwrap();
-        runner.exec(val(input)).unwrap()
+        runner.exec(&env, val(input)).unwrap()
     }
 
     #[test]
@@ -235,18 +267,18 @@ mod tests {
 
     #[test]
     fn invalid_query_is_a_compile_error() {
-        assert!(QueryRunner::new(".[").is_err());
+        let result: anyhow::Result<QueryRunner> = QueryRunner::new(".[");
+        assert!(result.is_err());
     }
 
     /// The `deref` filter resolves a qualified PPtr (`{file, path_id}`) back to the target object
-    /// through the globally-set env. Sole test touching the global `ENV`; the env's resolver type
-    /// is `GameFiles`, so this stages the fixture as a real `<tmp>/Game_Data/level0`.
+    /// through the env passed to `exec`. The env's resolver type is `GameFiles`, so this stages the
+    /// fixture as a real `<tmp>/Game_Data/level0`.
     #[test]
     fn deref_reads_through_a_qualified_pptr() {
         use rabex_env::Environment;
         use rabex_env::resolver::GameFiles;
         use rabex_env_testkit::Flat;
-        use std::sync::Arc;
 
         let (bytes, go_ids) = Flat::new(&["Player"]).write();
         let tmp = tempfile::TempDir::new().unwrap();
@@ -258,40 +290,58 @@ mod tests {
         let tpk = rabex::typetree::typetree_cache::sync::TypeTreeCache::new(
             rabex::tpk::TpkTypeTreeBlob::embedded(),
         );
-        super::QueryRunner::set_env(Arc::new(Environment::new(game_files, tpk)));
+        let env = Environment::new(game_files, tpk);
 
         let runner = QueryRunner::new("deref | .m_Name").unwrap();
         let pptr = val(&format!(r#"{{ "file": "level0", "path_id": {} }}"#, go_ids[0]));
-        let out = runner.exec(pptr).unwrap();
+        let out = runner.exec(&env, pptr).unwrap();
         assert_eq!(out, vec![val(r#""Player""#)]);
     }
 }
 
-pub struct DataKind;
+// `DataT` must be `'static`, so the resolver/provider ride along as `PhantomData` type params
+// rather than borrowed values; the actual `&Environment<R, P>` lives in `Data` and is threaded in
+// per `exec` call. Defaults mirror `Environment`'s, so `QueryRunner` (and `UniScan`) name neither.
+pub struct DataKind<R = GameFiles, P = TypeTreeCache<TpkTypeTreeBlob>>(PhantomData<fn() -> (R, P)>);
 
-impl DataT for DataKind {
+impl<R: 'static, P: 'static> DataT for DataKind<R, P> {
     type V<'a> = Val;
-    type Data<'a> = &'a Data<'a>;
+    type Data<'a> = &'a Data<'a, R, P>;
 }
 
-pub struct Data<'a> {
-    lut: &'a Lut<DataKind>,
+pub struct Data<'a, R = GameFiles, P = TypeTreeCache<TpkTypeTreeBlob>>
+where
+    R: 'static,
+    P: 'static,
+{
+    lut: &'a Lut<DataKind<R, P>>,
     inputs: Inputs<'a, Val>,
+    env: &'a Environment<R, P>,
 }
 
-impl<'a> Data<'a> {
-    pub fn new(lut: &'a Lut<DataKind>, inputs: Inputs<'a, Val>) -> Self {
-        Self { lut, inputs }
+impl<'a, R: 'static, P: 'static> Data<'a, R, P> {
+    pub fn new(
+        lut: &'a Lut<DataKind<R, P>>,
+        inputs: Inputs<'a, Val>,
+        env: &'a Environment<R, P>,
+    ) -> Self {
+        Self { lut, inputs, env }
     }
 }
 
-impl<'a> data::HasLut<'a, DataKind> for &'a Data<'a> {
-    fn lut(&self) -> &'a Lut<DataKind> {
+impl<'a, R: 'static, P: 'static> data::HasLut<'a, DataKind<R, P>> for &'a Data<'a, R, P> {
+    fn lut(&self) -> &'a Lut<DataKind<R, P>> {
         self.lut
     }
 }
 
-impl<'a> input::HasInputs<'a, Val> for &'a Data<'a> {
+impl<'a, R: 'static, P: 'static> HasEnv<'a, R, P> for &'a Data<'a, R, P> {
+    fn env(&self) -> &'a Environment<R, P> {
+        self.env
+    }
+}
+
+impl<'a, R: 'static, P: 'static> input::HasInputs<'a, Val> for &'a Data<'a, R, P> {
     fn inputs(&self) -> Inputs<'a, Val> {
         self.inputs
     }

@@ -14,7 +14,8 @@ use rabex::typetree::typetree_cache::sync::TypeTreeCache;
 use rabex_env::Environment;
 use rabex_env::addressables::ArchivePath;
 use rabex_env::handle::{ObjectRefHandle, SerializedFileHandle};
-use rabex_env::resolver::{EnvResolver as _, GameFiles};
+use rabex::typetree::TypeTreeProvider;
+use rabex_env::resolver::{EnvResolver, GameFiles};
 use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::utils::par_fold_reduce;
 use jaq_json::Rc;
@@ -98,7 +99,6 @@ impl UniScan {
         let env = Environment::new(game_files, tpk);
 
         let env = Arc::new(env);
-        QueryRunner::set_env(Arc::clone(&env));
 
         let build_settings = env.build_settings()?;
         let scene_names = build_settings
@@ -184,7 +184,7 @@ impl UniScan {
                 };
                 self.enrich_object(&path_str, file, script, &mut data)?;
 
-                let query_result = self.query.exec(data)?;
+                let query_result = self.query.exec(&self.env, data)?;
                 query_count.fetch_add(query_result.len(), Ordering::SeqCst);
 
                 for value in query_result {
@@ -255,10 +255,10 @@ impl UniScan {
     }
 }
 
-pub(crate) fn enrich_object(
+pub(crate) fn enrich_object<R: EnvResolver, P: TypeTreeProvider>(
     data: &mut jaq_json::Val,
     path_str: &str,
-    file: &SerializedFileHandle<'_>,
+    file: &SerializedFileHandle<'_, R, P>,
     script: Option<&MonoScript>,
     scene_names: Option<&[String]>,
 ) -> Result<(), anyhow::Error> {
