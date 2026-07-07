@@ -215,7 +215,7 @@ impl App {
         });
     }
 
-    fn results(&self) -> &[serde_json::Value] {
+    fn results(&self) -> &[uniscan::jaq_json::Val] {
         match self.main.results {
             Some(ref scan) => scan.items.as_slice(),
             None => &[],
@@ -225,7 +225,7 @@ impl App {
     fn export(&mut self) -> Result<()> {
         let results = self.results();
 
-        let formatted = serde_json::to_string_pretty(&results)?;
+        let formatted = uniscan::to_pretty_json_array(results);
         let game = &self.selected_game().name;
         let dir = std::env::temp_dir().join("uniscan").join(game);
         std::fs::create_dir_all(&dir)?;
@@ -238,7 +238,7 @@ impl App {
 
     fn save(&mut self) -> Result<()> {
         let results = self.results();
-        let formatted = serde_json::to_string_pretty(&results)?;
+        let formatted = uniscan::to_pretty_json_array(results);
         self.send_command(generic::Request::Save(formatted));
 
         Ok(())
@@ -343,7 +343,7 @@ impl App {
                     return flex_col(()).boxed();
                 };
 
-                let val = serde_json::to_string_pretty(&value).unwrap();
+                let val = uniscan::to_pretty_json(value);
 
                 margin(
                     sized_box(prose(val))

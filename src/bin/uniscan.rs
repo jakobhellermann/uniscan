@@ -27,20 +27,10 @@ fn main() -> Result<()> {
     Ok(())
 }
 
-fn print_all(all: &[serde_json::Value]) {
+fn print_all(all: &[jaq_json::Val]) {
     all.par_iter()
-        .map(|item| match serde_json::to_string_pretty(&item) {
-            Ok(item) => Some(format!("{}", item)),
-            Err(e) => {
-                eprintln!("{}", e);
-                None
-            }
-        })
+        .map(uniscan::to_pretty_json)
         .collect::<Vec<_>>()
         .iter()
-        .for_each(|x| {
-            if let Some(x) = x {
-                println!("{}", x);
-            }
-        })
+        .for_each(|x| println!("{}", x))
 }

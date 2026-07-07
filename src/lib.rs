@@ -2,9 +2,13 @@ use std::fmt::Write;
 pub mod qualify_pptr;
 pub mod query;
 
+// Re-exported so downstream crates (e.g. the UI) name the exact same `Val` type,
+// including the `sync` feature selection.
+pub use jaq_json;
+
 use query::QueryRunner;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{Context, Result};
 use rabex::tpk::TpkTypeTreeBlob;
 use rabex::typetree::typetree_cache::sync::TypeTreeCache;
 use rabex_env::Environment;
@@ -13,8 +17,8 @@ use rabex_env::handle::{ObjectRefHandle, SerializedFileHandle};
 use rabex_env::resolver::{EnvResolver as _, GameFiles};
 use rabex_env::unity::types::{MonoBehaviour, MonoScript};
 use rabex_env::utils::par_fold_reduce;
+use jaq_json::Rc;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
@@ -53,9 +57,30 @@ impl ScriptFilter {
 
 #[derive(Debug, Default)]
 pub struct ScanResults {
-    pub items: Vec<serde_json::Value>,
+    pub items: Vec<jaq_json::Val>,
     pub count: usize,
     pub query_count: usize,
+}
+
+/// Render a value as pretty-printed JSON using jaq's own writer.
+///
+/// Replaces the previous `serde_json::to_string_pretty` path, so that results can stay
+/// `jaq_json::Val` (no `Val -> serde_json::Value` conversion needed).
+pub fn to_pretty_json(v: &jaq_json::Val) -> String {
+    let pp = jaq_json::write::Pp {
+        indent: Some("  ".to_string()),
+        sep_space: true,
+        ..Default::default()
+    };
+    let mut buf = Vec::new();
+    jaq_json::write::write(&mut buf, &pp, 0, v).expect("writing to a Vec cannot fail");
+    String::from_utf8_lossy(&buf).into_owned()
+}
+
+/// Render a slice of values as a pretty-printed JSON array.
+pub fn to_pretty_json_array(items: &[jaq_json::Val]) -> String {
+    let arr: jaq_json::Val = items.iter().cloned().collect();
+    to_pretty_json(&arr)
 }
 
 impl UniScan {
@@ -156,8 +181,7 @@ impl UniScan {
                 query_count.fetch_add(query_result.len(), Ordering::SeqCst);
 
                 for value in query_result {
-                    // PERF: pass ownership
-                    acc.push(serde_json::Value::try_from(&value).map_err(|e| anyhow!("{e}"))?);
+                    acc.push(value);
                 }
                 Ok(())
             })?;

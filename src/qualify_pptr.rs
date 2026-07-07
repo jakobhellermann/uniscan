@@ -1,6 +1,5 @@
-use std::rc::Rc;
-
-use anyhow::{Context as _, Result};
+use anyhow::{Context as _, Result, anyhow};
+use jaq_json::Rc;
 use jaq_std::ValT;
 use rabex::objects::PPtr;
 use rabex::objects::pptr::{FileId, PathId};
@@ -8,10 +7,30 @@ use rabex::typetree::TypeTreeProvider;
 use rabex_env::handle::SerializedFileHandle;
 use rabex_env::resolver::EnvResolver;
 
-#[derive(serde_derive::Deserialize)]
 pub struct QualifiedPPtr {
     pub file: String,
     pub path_id: PathId,
+}
+
+impl QualifiedPPtr {
+    /// Extract a qualified PPtr from a `{file, path_id, ..}` value (as produced by
+    /// [`qualify_pptrs`]), without going through `serde_json::Value`.
+    pub fn from_val(v: &jaq_json::Val) -> Result<Self> {
+        let jaq_json::Val::Obj(map) = v else {
+            return Err(anyhow!("expected a PPtr object, found {v}"));
+        };
+        let field = |name: &[u8]| map.iter().find(|(k, _)| k.as_utf8_bytes() == Some(name));
+        let file = field(b"file")
+            .and_then(|(_, v)| v.as_utf8_bytes())
+            .context("PPtr missing string field `file`")?;
+        let path_id = field(b"path_id")
+            .and_then(|(_, v)| v.as_isize())
+            .context("PPtr missing integer field `path_id`")?;
+        Ok(QualifiedPPtr {
+            file: String::from_utf8_lossy(file).into_owned(),
+            path_id: path_id as PathId,
+        })
+    }
 }
 
 pub fn qualify_pptrs<R: EnvResolver, P: TypeTreeProvider>(
@@ -78,8 +97,26 @@ pub fn qualify_pptrs<R: EnvResolver, P: TypeTreeProvider>(
 #[cfg(test)]
 mod tests {
     use super::qualify_pptrs;
+    use jaq_json::Val;
+    use jaq_std::ValT as _;
     use rabex::objects::PPtr;
     use rabex_env_testkit::{Flat, with_handle};
+
+    fn val(s: &str) -> Val {
+        jaq_json::read::parse_single(s.as_bytes()).unwrap()
+    }
+
+    /// Look up an object field by key.
+    fn get<'a>(v: &'a Val, key: &str) -> &'a Val {
+        match v {
+            Val::Obj(map) => map
+                .iter()
+                .find(|(k, _)| k.as_utf8_bytes() == Some(key.as_bytes()))
+                .map(|(_, v)| v)
+                .unwrap_or_else(|| panic!("missing field `{key}`")),
+            _ => panic!("expected object, found {v}"),
+        }
+    }
 
     #[test]
     fn qualifies_local_pptr_and_collapses_null_pptr() {
@@ -97,13 +134,14 @@ mod tests {
                 .unwrap();
             qualify_pptrs("level0", file, &mut value).unwrap();
 
-            let json = serde_json::Value::try_from(&value).unwrap();
             assert_eq!(
-                json["m_GameObject"],
-                serde_json::json!({ "file": "level0", "path_id": go_id, "class_id": "GameObject" }),
+                get(&value, "m_GameObject"),
+                &val(&format!(
+                    r#"{{ "file": "level0", "path_id": {go_id}, "class_id": "GameObject" }}"#
+                )),
             );
             // a null PPtr collapses to null rather than a {file, path_id, class_id} object
-            assert_eq!(json["m_Father"], serde_json::json!(null));
+            assert_eq!(get(&value, "m_Father"), &Val::Null);
         });
     }
 }

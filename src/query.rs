@@ -4,7 +4,6 @@ use jaq_json::Val;
 use jaq_std::input::{self, Inputs};
 use rabex::objects::PPtr;
 use rabex_env::Environment;
-use serde::Deserialize;
 use std::sync::{Arc, RwLock};
 
 use crate::qualify_pptr::{QualifiedPPtr, qualify_pptrs};
@@ -13,10 +12,7 @@ fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
     let env = ENV.read().unwrap();
     let env = env.as_ref().unwrap();
 
-    // PERF: pass ownership
-    let qualified_pptr = QualifiedPPtr::deserialize(
-        serde_json::Value::try_from(&pptr).map_err(|e| anyhow::anyhow!("{e}"))?,
-    )?;
+    let qualified_pptr = QualifiedPPtr::from_val(&pptr)?;
 
     let file = env.load_serialized(&qualified_pptr.file).unwrap();
     let pptr = PPtr::local(qualified_pptr.path_id).typed::<jaq_json::Val>();
@@ -43,7 +39,7 @@ fn deref(pptr: jaq_json::Val) -> Result<jaq_json::Val> {
 }
 
 fn funs<D: for<'a> DataT<V<'a> = jaq_json::Val>>()
--> impl Iterator<Item = jaq_std::Filter<jaq_core::Native<D>>> {
+-> impl Iterator<Item = jaq_core::native::Fun<D>> {
     [(
         "deref",
         vec![].into_boxed_slice(),
@@ -79,7 +75,12 @@ impl QueryRunner {
     pub fn new(query: &str) -> Result<Self> {
         let uniscan_defs = load::parse(include_str!("defs.jq"), |p| p.defs()).unwrap();
 
-        let loader = load::Loader::new(jaq_std::defs().chain(jaq_json::defs()).chain(uniscan_defs));
+        let loader = load::Loader::new(
+            jaq_core::defs()
+                .chain(jaq_std::defs())
+                .chain(jaq_json::defs())
+                .chain(uniscan_defs),
+        );
 
         let program = load::File {
             code: query,
@@ -123,7 +124,12 @@ impl QueryRunner {
             anyhow!("{text}")
         })?;
         let filter = jaq_core::Compiler::default()
-            .with_funs(jaq_std::funs().chain(jaq_json::funs()).chain(funs()))
+            .with_funs(
+                jaq_core::funs()
+                    .chain(jaq_std::funs())
+                    .chain(jaq_json::funs())
+                    .chain(funs()),
+            )
             .with_global_vars(["$scene_path"])
             .compile(modules)
             .map_err(|errors| {
@@ -162,21 +168,23 @@ static ENV: RwLock<Option<Arc<Environment>>> = RwLock::new(None);
 #[cfg(test)]
 mod tests {
     use super::QueryRunner;
-    use serde_json::json;
+    use jaq_json::Val;
 
-    /// Run `query` over `input` and return the matches as `serde_json` values. Only covers
-    /// env-free queries — the `deref`-based `defs.jq` filters need a live `ENV`.
-    fn run(query: &str, input: serde_json::Value) -> Vec<serde_json::Value> {
+    /// Parse a single JSON value into a `Val` using jaq's own reader.
+    fn val(s: &str) -> Val {
+        jaq_json::read::parse_single(s.as_bytes()).unwrap()
+    }
+
+    /// Run `query` over the JSON `input` and return the matches. Only covers env-free queries —
+    /// the `deref`-based `defs.jq` filters need a live `ENV`.
+    fn run(query: &str, input: &str) -> Vec<Val> {
         let runner = QueryRunner::new(query).unwrap();
-        let out = runner.exec(jaq_json::Val::from(input)).unwrap();
-        out.iter()
-            .map(|v| serde_json::Value::try_from(v).unwrap())
-            .collect()
+        runner.exec(val(input)).unwrap()
     }
 
     #[test]
     fn plain_jq_field_access_works_through_the_runner() {
-        assert_eq!(run(".a", json!({"a": 1, "b": 2})), vec![json!(1)]);
+        assert_eq!(run(".a", r#"{"a": 1, "b": 2}"#), vec![val("1")]);
     }
 
     #[test]
@@ -184,34 +192,34 @@ mod tests {
         assert_eq!(
             run(
                 ".[] | select(._type == \"Enemy\")",
-                json!([{"_type": "Enemy"}, {"_type": "Prop"}]),
+                r#"[{"_type": "Enemy"}, {"_type": "Prop"}]"#,
             ),
-            vec![json!({"_type": "Enemy"})],
+            vec![val(r#"{"_type": "Enemy"}"#)],
         );
     }
 
     #[test]
     fn maybe_guards_null() {
-        assert_eq!(run("maybe(. + 1)", json!(null)), vec![json!(null)]);
-        assert_eq!(run("maybe(. + 1)", json!(5)), vec![json!(6)]);
+        assert_eq!(run("maybe(. + 1)", "null"), vec![val("null")]);
+        assert_eq!(run("maybe(. + 1)", "5"), vec![val("6")]);
     }
 
     #[test]
     fn nonnull_drops_nulls_from_the_stream() {
-        assert_eq!(run(".[] | nonnull", json!([1, null, 2])), vec![json!(1), json!(2)]);
+        assert_eq!(run(".[] | nonnull", "[1, null, 2]"), vec![val("1"), val("2")]);
     }
 
     #[test]
     fn filterkeys_keeps_only_matching_keys() {
         assert_eq!(
-            run("filterkeys(\"m_\")", json!({"m_Name": "a", "tag": "b", "m_Enabled": 1})),
-            vec![json!({"m_Name": "a", "m_Enabled": 1})],
+            run("filterkeys(\"m_\")", r#"{"m_Name": "a", "tag": "b", "m_Enabled": 1}"#),
+            vec![val(r#"{"m_Name": "a", "m_Enabled": 1}"#)],
         );
     }
 
     #[test]
     fn name_uses_m_name_when_present() {
-        assert_eq!(run("name", json!({"m_Name": "Hero"})), vec![json!("Hero")]);
+        assert_eq!(run("name", r#"{"m_Name": "Hero"}"#), vec![val(r#""Hero""#)]);
     }
 
     #[test]
@@ -219,9 +227,9 @@ mod tests {
         assert_eq!(
             run(
                 "[components]",
-                json!({"m_Component": [{"component": "a"}, {"component": "b"}]}),
+                r#"{"m_Component": [{"component": "a"}, {"component": "b"}]}"#,
             ),
-            vec![json!(["a", "b"])],
+            vec![val(r#"["a", "b"]"#)],
         );
     }
 
@@ -253,13 +261,9 @@ mod tests {
         super::QueryRunner::set_env(Arc::new(Environment::new(game_files, tpk)));
 
         let runner = QueryRunner::new("deref | .m_Name").unwrap();
-        let pptr = json!({ "file": "level0", "path_id": go_ids[0] });
-        let out = runner.exec(jaq_json::Val::from(pptr)).unwrap();
-        let out: Vec<_> = out
-            .iter()
-            .map(|v| serde_json::Value::try_from(v).unwrap())
-            .collect();
-        assert_eq!(out, vec![json!("Player")]);
+        let pptr = val(&format!(r#"{{ "file": "level0", "path_id": {} }}"#, go_ids[0]));
+        let out = runner.exec(pptr).unwrap();
+        assert_eq!(out, vec![val(r#""Player""#)]);
     }
 }
 

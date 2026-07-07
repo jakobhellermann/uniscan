@@ -9,15 +9,12 @@ mimalloc = "0.1"
 anyhow = "1.0"
 rabex.workspace = true
 rayon = "1.11"
-serde = { version = "1.0", default-features = false }
-serde_derive = "1.0"
-serde_json = { version = "1.0", features = ["indexmap"] }
 tracing = "0.1"
 rabex-env.workspace = true
 
-jaq-core = "2.2"
-jaq-json = { version = "1.1", default-features = false, features = ["json", "serde_json", "serde"] }
-jaq-std = { version = "2.1", default-features = false, features = ["std", "math"] }
+jaq-core = "3.1"
+jaq-json = { version = "2.0", default-features = false, features = ["std", "serde", "sync"] }
+jaq-std = { version = "3.0", default-features = false, features = ["std", "math"] }
 
 [dev-dependencies]
 rabex-env-testkit = { path = "../rabex-env/crates/rabex-env-testkit" }
@@ -49,11 +46,6 @@ lto = "thin"
 
 [profile.dev.package."*"]
 opt-level = 2
-
-[patch.crates-io]
-jaq-core = { git = "https://github.com/jakobhellermann/jaq", branch = "dev" }
-jaq-std = { git = "https://github.com/jakobhellermann/jaq", branch = "dev" }
-jaq-json = { git = "https://github.com/jakobhellermann/jaq", branch = "dev" }
 
 # [patch."https://github.com/jakobhellermann/rabex-env"]
 # rabex-env = { path = "../rabex-env" }
