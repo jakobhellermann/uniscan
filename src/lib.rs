@@ -276,6 +276,42 @@ fn format_path(path: &Path) -> String {
     return formatted.replace('\\', "/");
 }
 
+#[cfg(test)]
+mod tests {
+    use super::ScriptFilter;
+    use rabex_env::unity::types::MonoScript;
+
+    fn script(namespace: &str, class: &str) -> MonoScript {
+        MonoScript {
+            m_Name: class.to_owned(),
+            m_ExecutionOrder: 0,
+            m_PropertiesHash: [0; 16],
+            m_ClassName: class.to_owned(),
+            m_Namespace: namespace.to_owned(),
+            m_AssemblyName: "Assembly-CSharp.dll".to_owned(),
+        }
+    }
+
+    #[test]
+    fn empty_filter_matches_everything() {
+        assert!(ScriptFilter::empty().matches(&script("", "HeroController")));
+    }
+
+    #[test]
+    fn matches_case_insensitive_substring_of_full_name() {
+        let s = script("Game.Enemies", "HeroController");
+        assert!(ScriptFilter::new("hero").matches(&s));
+        assert!(ScriptFilter::new("HERO").matches(&s));
+        // the filter runs against the namespaced full name
+        assert!(ScriptFilter::new("game.enemies.herocontroller").matches(&s));
+    }
+
+    #[test]
+    fn rejects_non_substring() {
+        assert!(!ScriptFilter::new("villain").matches(&script("", "HeroController")));
+    }
+}
+
 const MIN_LOG_DURATION: std::time::Duration = std::time::Duration::from_millis(1);
 pub fn time<T>(name: &'static str, f: impl FnOnce() -> T) -> T {
     let start = std::time::Instant::now();

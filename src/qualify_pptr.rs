@@ -74,3 +74,36 @@ pub fn qualify_pptrs<R: EnvResolver, P: TypeTreeProvider>(
     };
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::qualify_pptrs;
+    use rabex::objects::PPtr;
+    use rabex_env_testkit::{Flat, with_handle};
+
+    #[test]
+    fn qualifies_local_pptr_and_collapses_null_pptr() {
+        // Flat writes a GameObject followed by its Transform; the Transform's `m_GameObject` points
+        // back at the GameObject, and `m_Father` is a null PPtr.
+        let (bytes, go_ids) = Flat::new(&["Player"]).write();
+        let go_id = go_ids[0];
+        let transform_id = go_id + 1;
+
+        with_handle("level0", bytes, |file| {
+            let mut value = file
+                .deref(PPtr::local(transform_id).typed::<jaq_json::Val>())
+                .unwrap()
+                .read()
+                .unwrap();
+            qualify_pptrs("level0", file, &mut value).unwrap();
+
+            let json = serde_json::Value::try_from(&value).unwrap();
+            assert_eq!(
+                json["m_GameObject"],
+                serde_json::json!({ "file": "level0", "path_id": go_id, "class_id": "GameObject" }),
+            );
+            // a null PPtr collapses to null rather than a {file, path_id, class_id} object
+            assert_eq!(json["m_Father"], serde_json::json!(null));
+        });
+    }
+}

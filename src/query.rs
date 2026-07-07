@@ -159,6 +159,110 @@ impl QueryRunner {
 
 static ENV: RwLock<Option<Arc<Environment>>> = RwLock::new(None);
 
+#[cfg(test)]
+mod tests {
+    use super::QueryRunner;
+    use serde_json::json;
+
+    /// Run `query` over `input` and return the matches as `serde_json` values. Only covers
+    /// env-free queries — the `deref`-based `defs.jq` filters need a live `ENV`.
+    fn run(query: &str, input: serde_json::Value) -> Vec<serde_json::Value> {
+        let runner = QueryRunner::new(query).unwrap();
+        let out = runner.exec(jaq_json::Val::from(input)).unwrap();
+        out.iter()
+            .map(|v| serde_json::Value::try_from(v).unwrap())
+            .collect()
+    }
+
+    #[test]
+    fn plain_jq_field_access_works_through_the_runner() {
+        assert_eq!(run(".a", json!({"a": 1, "b": 2})), vec![json!(1)]);
+    }
+
+    #[test]
+    fn select_filters_the_stream() {
+        assert_eq!(
+            run(
+                ".[] | select(._type == \"Enemy\")",
+                json!([{"_type": "Enemy"}, {"_type": "Prop"}]),
+            ),
+            vec![json!({"_type": "Enemy"})],
+        );
+    }
+
+    #[test]
+    fn maybe_guards_null() {
+        assert_eq!(run("maybe(. + 1)", json!(null)), vec![json!(null)]);
+        assert_eq!(run("maybe(. + 1)", json!(5)), vec![json!(6)]);
+    }
+
+    #[test]
+    fn nonnull_drops_nulls_from_the_stream() {
+        assert_eq!(run(".[] | nonnull", json!([1, null, 2])), vec![json!(1), json!(2)]);
+    }
+
+    #[test]
+    fn filterkeys_keeps_only_matching_keys() {
+        assert_eq!(
+            run("filterkeys(\"m_\")", json!({"m_Name": "a", "tag": "b", "m_Enabled": 1})),
+            vec![json!({"m_Name": "a", "m_Enabled": 1})],
+        );
+    }
+
+    #[test]
+    fn name_uses_m_name_when_present() {
+        assert_eq!(run("name", json!({"m_Name": "Hero"})), vec![json!("Hero")]);
+    }
+
+    #[test]
+    fn components_streams_the_component_pptrs() {
+        assert_eq!(
+            run(
+                "[components]",
+                json!({"m_Component": [{"component": "a"}, {"component": "b"}]}),
+            ),
+            vec![json!(["a", "b"])],
+        );
+    }
+
+    #[test]
+    fn invalid_query_is_a_compile_error() {
+        assert!(QueryRunner::new(".[").is_err());
+    }
+
+    /// The `deref` filter resolves a qualified PPtr (`{file, path_id}`) back to the target object
+    /// through the globally-set env. Sole test touching the global `ENV`; the env's resolver type
+    /// is `GameFiles`, so this stages the fixture as a real `<tmp>/Game_Data/level0`.
+    #[test]
+    fn deref_reads_through_a_qualified_pptr() {
+        use rabex_env::Environment;
+        use rabex_env::resolver::GameFiles;
+        use rabex_env_testkit::Flat;
+        use std::sync::Arc;
+
+        let (bytes, go_ids) = Flat::new(&["Player"]).write();
+        let tmp = tempfile::TempDir::new().unwrap();
+        let data_dir = tmp.path().join("Game_Data");
+        std::fs::create_dir(&data_dir).unwrap();
+        std::fs::write(data_dir.join("level0"), bytes).unwrap();
+
+        let game_files = GameFiles::probe(tmp.path()).unwrap();
+        let tpk = rabex::typetree::typetree_cache::sync::TypeTreeCache::new(
+            rabex::tpk::TpkTypeTreeBlob::embedded(),
+        );
+        super::QueryRunner::set_env(Arc::new(Environment::new(game_files, tpk)));
+
+        let runner = QueryRunner::new("deref | .m_Name").unwrap();
+        let pptr = json!({ "file": "level0", "path_id": go_ids[0] });
+        let out = runner.exec(jaq_json::Val::from(pptr)).unwrap();
+        let out: Vec<_> = out
+            .iter()
+            .map(|v| serde_json::Value::try_from(v).unwrap())
+            .collect();
+        assert_eq!(out, vec![json!("Player")]);
+    }
+}
+
 pub struct DataKind;
 
 impl DataT for DataKind {
