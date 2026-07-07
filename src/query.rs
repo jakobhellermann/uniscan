@@ -155,7 +155,6 @@ impl<R: EnvResolver + 'static, P: TypeTreeProvider + 'static> QueryRunner<R, P> 
                     .chain(jaq_json::funs())
                     .chain(funs::<R, P>()),
             )
-            .with_global_vars(["$scene_path"])
             .compile(modules)
             .map_err(|errors| {
                 let mut text = String::new();
@@ -179,7 +178,7 @@ impl<R: EnvResolver + 'static, P: TypeTreeProvider + 'static> QueryRunner<R, P> 
             env,
         };
         let out = self.filter.id.run::<DataKind<R, P>>((
-            jaq_core::Ctx::new(&data, Vars::new([jaq_json::Val::utf8_str("hi")])),
+            jaq_core::Ctx::new(&data, Vars::new(core::iter::empty())),
             item,
         ));
 
